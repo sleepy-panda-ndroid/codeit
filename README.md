@@ -1,4 +1,5 @@
 ```markdown
+Open this file in a editor, possibly in vscode to better understand the project structure.
 # CodeIt
 
 CodeIt is a **browser-based online IDE** that allows users to create projects, edit multiple files, and collaborate through role-based project sharing.  
