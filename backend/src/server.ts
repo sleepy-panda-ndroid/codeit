@@ -6,6 +6,7 @@ import { authRouter } from "./routes/auth.routes";
 import { projectRouter } from "./routes/project.routes";
 import { fileRouter } from "./routes/file.routes";
 import { shareRouter } from "./routes/share.routes";
+import { executionRouter } from "./routes/execution.routes";
 
 dotenv.config();
 console.log("SERVER.TS LOADED v1");
@@ -18,6 +19,7 @@ app.use("/auth", authRouter);
 app.use("/projects", projectRouter);
 app.use(fileRouter);
 app.use(shareRouter);
+app.use(executionRouter);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
@@ -31,7 +33,16 @@ app.use((err: any, _req: any, res: any, next: any) => {
   if (err?.type === "request.aborted") {
     return res.status(400).json({ error: "Request aborted" });
   }
-  return next(err);
+
+  console.error(err);
+
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  return res.status(500).json({
+    error: err instanceof Error ? err.message : "Internal server error",
+  });
 });
 
 async function main() {

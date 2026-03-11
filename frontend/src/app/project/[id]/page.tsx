@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProjectEditor } from "@/hooks/useProjectEditor";
 import { FileSidebar } from "@/components/editor/FileSidebar";
 import { EditorPane } from "@/components/editor/EditorPane";
+import { OutputPanel } from "@/components/editor/OutputPanel";
 
 export default function ProjectEditorPage() {
   const { id } = useParams<{ id: string }>();
@@ -35,7 +36,7 @@ export default function ProjectEditorPage() {
         readOnly={ed.readOnly}
       />
 
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-h-0">
         <div className="border-b px-3 py-2 flex items-center justify-between">
           <div className="text-sm">
             <span className="font-semibold">{ed.projectName || "Project"}</span>
@@ -44,15 +45,29 @@ export default function ProjectEditorPage() {
           <div className="text-sm border px-2 py-1">{ed.role || "..."}</div>
         </div>
 
-        <EditorPane
-          activePath={ed.activePath}
-          content={ed.content}
-          onChange={ed.setContent}
-          onSave={ed.handleSave}
-          saving={ed.saving}
-          dirty={ed.dirty}
-          readOnly={ed.readOnly}
-        />
+        <div className="flex-1 flex flex-col min-h-0">
+          <EditorPane
+            activePath={ed.activePath}
+            content={ed.content}
+            onChange={ed.setContent}
+            onSave={ed.handleSave}
+            saving={ed.saving}
+            dirty={ed.dirty}
+            readOnly={ed.readOnly}
+            onRun={ed.handleRun}
+            running={ed.running}
+            executionLanguage={ed.executionLanguage}
+          />
+
+          <OutputPanel
+            loading={ed.running}
+            result={ed.executionResult}
+            error={ed.executionError}
+            stdin={ed.stdin}
+            onChangeStdin={ed.setStdin}
+            onClear={ed.clearOutput}
+          />
+        </div>
       </div>
     </div>
   );
