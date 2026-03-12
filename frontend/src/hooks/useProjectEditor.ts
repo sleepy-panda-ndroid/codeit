@@ -245,26 +245,26 @@ export function useProjectEditor(projectId: string) {
     }
   }
 
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      const key = e.key.toLowerCase();
+  // useEffect(() => {
+  //   function onKeyDown(e: KeyboardEvent) {
+  //     const key = e.key.toLowerCase();
 
-      if ((e.ctrlKey || e.metaKey) && key === "s") {
-        e.preventDefault();
-        handleSave();
-        return;
-      }
+  //     if ((e.ctrlKey || e.metaKey) && key === "s") {
+  //       e.preventDefault();
+  //       handleSave();
+  //       return;
+  //     }
 
-      if ((e.ctrlKey || e.metaKey) && key === "enter") {
-        e.preventDefault();
-        handleRun();
-      }
-    }
+  //     if ((e.ctrlKey || e.metaKey) && key === "enter") {
+  //       e.preventDefault();
+  //       handleRun();
+  //     }
+  //   }
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, activePath, readOnly, executionLanguage, stdin]);
+  //   window.addEventListener("keydown", onKeyDown);
+  //   return () => window.removeEventListener("keydown", onKeyDown);
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [content, activePath, readOnly, executionLanguage, stdin]);
 
   useEffect(() => {
     function beforeUnload(e: BeforeUnloadEvent) {
