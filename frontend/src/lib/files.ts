@@ -32,3 +32,15 @@ export async function deleteFile(projectId: string, path: string) {
     method: "DELETE",
   });
 }
+
+export async function renameFile(
+  projectId: string,
+  path: string,
+  newPath: string
+) {
+  const encoded = encodeURIComponent(path);
+  return apiFetch(`/projects/${projectId}/files/${encoded}/rename`, {
+    method: "PATCH",
+    body: JSON.stringify({ newPath }),
+  });
+}

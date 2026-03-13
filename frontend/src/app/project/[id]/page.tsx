@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useProjectEditor } from "@/hooks/useProjectEditor";
@@ -127,12 +127,43 @@ export default function ProjectEditorPage() {
       if ((e.ctrlKey || e.metaKey) && key === "j") {
         e.preventDefault();
         setTerminalCollapsed((v) => !v);
+        return;
+      }
+
+      if (e.altKey && key === "w") {
+        e.preventDefault();
+        ed.closeTab(ed.activePath);
+        return;
+      }
+
+      if (e.altKey && key === "n") {
+        e.preventDefault();
+        ed.switchTab(e.shiftKey ? -1 : 1);
       }
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [ed.activePath, ed.closeTab, ed.switchTab]);
+
+  const tabItems = useMemo(() => {
+    const counts = new Map<string, number>();
+    ed.openPaths.forEach((path) => {
+      const name = path.split("/").pop() || path;
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    });
+
+    return ed.openPaths.map((path) => {
+      const name = path.split("/").pop() || path;
+      const label = (counts.get(name) ?? 0) > 1 ? path : name;
+
+      return {
+        path,
+        label,
+        dirty: ed.isPathDirty(path),
+      };
+    });
+  }, [ed.openPaths, ed.isPathDirty]);
 
   function startSidebarResize(e: React.MouseEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -236,8 +267,12 @@ export default function ProjectEditorPage() {
                 onSelect={ed.setActivePath}
                 onCreate={ed.handleCreateFile}
                 onDelete={ed.handleDeleteFile}
+                onRename={ed.handleRenameFile}
                 onBack={() => router.push("/playground")}
                 readOnly={ed.readOnly}
+                busy={ed.fileBusy}
+                error={ed.fileError}
+                onClearError={ed.clearFileError}
               />
             </div>
 
@@ -266,6 +301,9 @@ export default function ProjectEditorPage() {
               onRun={ed.handleRun}
               running={ed.running}
               executionLanguage={ed.executionLanguage}
+              tabs={tabItems}
+              onSelectTab={ed.setActivePath}
+              onCloseTab={ed.closeTab}
             />
           </div>
 

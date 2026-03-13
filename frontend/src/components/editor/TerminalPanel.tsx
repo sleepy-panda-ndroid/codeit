@@ -65,6 +65,15 @@ export function TerminalPanel({
 
   const outputText = useMemo(() => buildOutputText(result), [result]);
   const errorText = useMemo(() => buildErrorText(result, error), [result, error]);
+  const statusLabel = loading
+    ? "Running"
+    : result
+    ? result.status.description
+    : error
+    ? "Failed"
+    : "Idle";
+  const timeLabel = result?.time ? `${result.time}s` : "-";
+  const exitLabel = result?.exitCode ?? "-";
 
   async function handleImportInputFile(
     e: React.ChangeEvent<HTMLInputElement>
@@ -95,6 +104,22 @@ export function TerminalPanel({
     a.remove();
 
     URL.revokeObjectURL(url);
+  }
+
+  async function handleCopyOutput() {
+    try {
+      await navigator.clipboard.writeText(outputText);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = outputText;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+    }
   }
 
   return (
@@ -129,13 +154,22 @@ export function TerminalPanel({
           )}
 
           {activeTab === "output" && (
-            <button
-              className="border px-2 py-1 text-xs"
-              onClick={handleExportOutput}
-              type="button"
-            >
-              Export Output
-            </button>
+            <>
+              <button
+                className="border px-2 py-1 text-xs"
+                onClick={handleCopyOutput}
+                type="button"
+              >
+                Copy Output
+              </button>
+              <button
+                className="border px-2 py-1 text-xs"
+                onClick={handleExportOutput}
+                type="button"
+              >
+                Export Output
+              </button>
+            </>
           )}
 
           <button
@@ -147,14 +181,10 @@ export function TerminalPanel({
             Clear
           </button>
 
-          <div className="text-xs text-gray-600 min-w-[120px] text-right">
-            {loading
-              ? "Running..."
-              : result
-              ? `Status: ${result.status.description}`
-              : error
-              ? "Run failed"
-              : "Idle"}
+          <div className="text-xs text-gray-600 text-right">
+            <div>Status: {statusLabel}</div>
+            <div>Time: {timeLabel}</div>
+            <div>Exit: {exitLabel}</div>
           </div>
         </div>
       </div>

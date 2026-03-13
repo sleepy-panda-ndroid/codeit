@@ -95,8 +95,12 @@ export function IDELayout({
               onSelect={onSelectFile}
               onCreate={onCreateFile}
               onDelete={onDeleteFile}
+              onRename={() => {}}
               onBack={onBack}
               readOnly={readOnly}
+              busy={false}
+              error={null}
+              onClearError={() => {}}
             />
           </div>
 

@@ -6,7 +6,6 @@ import { hashPassword, verifyPassword, signJwt } from "../services/auth.service"
 import { authJwt } from "../middleware/authJwt";
 
 export const authRouter = Router();
-console.log("AUTH.ROUTES LOADED v1");
 const signupSchema = z.object({
   name: z.string().trim().max(80).optional().default(""),
   email: z.string().trim().email(),

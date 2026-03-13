@@ -89,6 +89,44 @@ fileRouter.put(
   }
 );
 
+// Rename a file (WRITER+)
+const renameSchema = z.object({
+  newPath: z.string().trim().min(1).max(300),
+});
+
+fileRouter.patch(
+  "/projects/:id/files/:path/rename",
+  authJwt,
+  requireProjectRole(["OWNER", "WRITER"]),
+  async (req: any, res) => {
+    const parsed = renameSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
+
+    const projectId = req.params.id;
+    const path = decodeURIComponent(req.params.path);
+    const newPath = parsed.data.newPath;
+
+    if (path === newPath) {
+      return res.json({ ok: true, path: newPath });
+    }
+
+    try {
+      const updated = await FileModel.findOneAndUpdate(
+        { projectId, path },
+        { $set: { path: newPath } },
+        { new: true }
+      );
+
+      if (!updated) return res.status(404).json({ error: "File not found" });
+
+      return res.json({ ok: true, path: updated.path, updatedAt: updated.updatedAt });
+    } catch (e: any) {
+      if (e?.code === 11000) return res.status(409).json({ error: "File path already exists" });
+      throw e;
+    }
+  }
+);
+
 // Delete a file (WRITER+)
 fileRouter.delete(
   "/projects/:id/files/:path",

@@ -23,18 +23,20 @@ export async function apiFetch<T>(
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
 
-    try {
-      const data = await res.json();
-      if (typeof data?.error === "string") {
-        message = data.error;
-      } else if (typeof data?.message === "string") {
-        message = data.message;
-      } else {
-        message = JSON.stringify(data);
+    const text = await res.text();
+    if (text) {
+      try {
+        const data = JSON.parse(text);
+        if (typeof data?.error === "string") {
+          message = data.error;
+        } else if (typeof data?.message === "string") {
+          message = data.message;
+        } else {
+          message = JSON.stringify(data);
+        }
+      } catch {
+        message = text;
       }
-    } catch {
-      const text = await res.text();
-      if (text) message = text;
     }
 
     throw new Error(message);

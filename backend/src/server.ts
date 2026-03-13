@@ -9,7 +9,6 @@ import { shareRouter } from "./routes/share.routes";
 import { executionRouter } from "./routes/execution.routes";
 
 dotenv.config();
-console.log("SERVER.TS LOADED v1");
 const app = express();
 
 app.use(cors({ origin: true, credentials: true }));
