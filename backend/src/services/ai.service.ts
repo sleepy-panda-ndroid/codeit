@@ -28,8 +28,8 @@ export async function requestAIChat(input: AIChatInput): Promise<string> {
     throw new Error("AI_API_KEY is missing in backend environment");
   }
 
-  const baseUrl = (process.env.AI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-  const model = process.env.AI_MODEL || "gpt-4o-mini";
+  const baseUrl = (process.env.AI_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/$/, "");
+  const model = process.env.AI_MODEL || "llama-3.1-8b-instant";
   const systemPrompt = process.env.AI_SYSTEM_PROMPT?.trim();
 
   const messages = systemPrompt
