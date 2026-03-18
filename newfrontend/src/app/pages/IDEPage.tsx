@@ -12,6 +12,7 @@ import {
   CheckCheck,
   Clock,
   AlertCircle,
+  Settings,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
@@ -19,6 +20,7 @@ import FileExplorer from "../components/FileExplorer";
 import CodeEditor from "../components/CodeEditor";
 import TerminalPanel, { ExecutionResult } from "../components/TerminalPanel";
 import AIChatPanel from "../components/AIChatPanel";
+import EditorDashboard, { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from "../components/EditorDashboard";
 import EditorTabs from "../components/EditorTabs";
 import {
   createFile,
@@ -30,7 +32,6 @@ import {
 } from "../../lib/files";
 import { executeProjectCode, type ExecutionLanguage } from "../../lib/execution";
 import { getProject } from "../../lib/projects";
-import { USER_PREFERENCES_CHANGED_EVENT, getStoredUserPreferences } from "../../lib/settings";
 
 interface OpenFile {
   id: string;
@@ -55,6 +56,83 @@ interface PersistedIdeState {
 
 type SaveStatus = "saved" | "saving" | "unsaved";
 type Role = "OWNER" | "WRITER" | "READER";
+type KeybindingPreset = EditorSettings["keybinding"];
+
+const EDITOR_SETTINGS_STORAGE_KEY = "codeit:editor-dashboard-settings";
+
+const KEYBINDING_PREVIEWS: Record<KeybindingPreset, Array<[string, string]>> = {
+  default: [
+    ["Ctrl+S", "Save"],
+    ["Ctrl+Enter", "Run"],
+    ["Ctrl+B", "Toggle Sidebar"],
+    ["Ctrl+J", "Toggle Terminal"],
+    ["Ctrl+,", "Editor Settings"],
+  ],
+  vim: [
+    [":w", "Save file"],
+    [":q", "Quit editor"],
+    [":wq", "Save and quit"],
+    ["dd", "Delete line"],
+    ["gg / G", "Top / bottom"],
+  ],
+  emacs: [
+    ["Ctrl+X Ctrl+S", "Save"],
+    ["Ctrl+X K", "Close buffer"],
+    ["Ctrl+A / Ctrl+E", "Line start / end"],
+    ["Alt+W", "Copy region"],
+    ["Ctrl+Y", "Paste"],
+  ],
+};
+
+function loadEditorDashboardSettings(): EditorSettings {
+  if (typeof window === "undefined") {
+    return DEFAULT_EDITOR_SETTINGS;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(EDITOR_SETTINGS_STORAGE_KEY);
+    if (!raw) {
+      return DEFAULT_EDITOR_SETTINGS;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<EditorSettings> & {
+      autoSaveEnabled?: boolean;
+      keybindings?: EditorSettings["keybinding"];
+      renderWhitespace?: EditorSettings["renderWhitespace"] | boolean;
+    };
+
+    const migrated: Partial<EditorSettings> = {
+      ...parsed,
+      autoSave:
+        typeof parsed.autoSave === "boolean"
+          ? parsed.autoSave
+          : typeof parsed.autoSaveEnabled === "boolean"
+          ? parsed.autoSaveEnabled
+          : DEFAULT_EDITOR_SETTINGS.autoSave,
+      keybinding:
+        parsed.keybinding ?? parsed.keybindings ?? DEFAULT_EDITOR_SETTINGS.keybinding,
+    };
+
+    if (typeof parsed.renderWhitespace === "boolean") {
+      migrated.renderWhitespace = parsed.renderWhitespace ? "all" : "none";
+    }
+
+    return {
+      ...DEFAULT_EDITOR_SETTINGS,
+      ...migrated,
+    };
+  } catch {
+    return DEFAULT_EDITOR_SETTINGS;
+  }
+}
+
+function formatContentOnSave(content: string): string {
+  return content
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[\t ]+$/g, ""))
+    .join("\n");
+}
 
 const LANGUAGE_DISPLAY: Record<string, string> = {
   javascript: "JavaScript",
@@ -189,8 +267,8 @@ export default function IDEPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null);
   const [stdin, setStdin] = useState("");
-  const [editorFontSize, setEditorFontSize] = useState(14);
-  const [editorTabSize, setEditorTabSize] = useState(2);
+  const [showEditorSettings, setShowEditorSettings] = useState(false);
+  const [editorSettings, setEditorSettings] = useState<EditorSettings>(() => loadEditorDashboardSettings());
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const [closeConfirm, setCloseConfirm] = useState<{ fileId: string; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -277,22 +355,9 @@ export default function IDEPage() {
   }, [activeFile?.content, activeFile?.savedContent]);
 
   useEffect(() => {
-    const applyEditorPreferences = () => {
-      const prefs = getStoredUserPreferences();
-      const parsedFontSize = Number.parseInt(prefs.fontSize, 10);
-      const parsedTabSize = Number.parseInt(prefs.tabSize, 10);
-
-      setEditorFontSize(Number.isFinite(parsedFontSize) ? parsedFontSize : 14);
-      setEditorTabSize(Number.isFinite(parsedTabSize) ? parsedTabSize : 2);
-    };
-
-    applyEditorPreferences();
-    window.addEventListener(USER_PREFERENCES_CHANGED_EVENT, applyEditorPreferences);
-
-    return () => {
-      window.removeEventListener(USER_PREFERENCES_CHANGED_EVENT, applyEditorPreferences);
-    };
-  }, []);
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(EDITOR_SETTINGS_STORAGE_KEY, JSON.stringify(editorSettings));
+  }, [editorSettings]);
 
   useEffect(() => {
     if (!projectId || !hasHydratedProjectStateRef.current || typeof window === "undefined") return;
@@ -376,18 +441,22 @@ export default function IDEPage() {
     const target = openFiles.find((f) => f.id === targetId);
     if (!target || target.content === target.savedContent) return true;
 
+    const contentToSave = editorSettings.formatOnSave
+      ? formatContentOnSave(target.content)
+      : target.content;
+
     setSaveStatus("saving");
     setFileError("");
 
     try {
-      await saveFile(projectId, target.path, target.content);
+      await saveFile(projectId, target.path, contentToSave);
 
       setOpenFiles((prev) => prev.map((f) => (
-        f.id === targetId ? { ...f, savedContent: f.content } : f
+        f.id === targetId ? { ...f, content: contentToSave, savedContent: contentToSave } : f
       )));
 
       setProjectFiles((prev) => prev.map((file) => (
-        file.path === target.path ? { ...file, content: target.content, updatedAt: new Date().toISOString() } : file
+        file.path === target.path ? { ...file, content: contentToSave, updatedAt: new Date().toISOString() } : file
       )));
 
       setSaveStatus("saved");
@@ -397,7 +466,27 @@ export default function IDEPage() {
       setFileError(err instanceof Error ? err.message : "Failed to save file");
       return false;
     }
-  }, [activeFileId, openFiles, projectId, readOnly]);
+  }, [activeFileId, editorSettings.formatOnSave, openFiles, projectId, readOnly]);
+
+  useEffect(() => {
+    if (!editorSettings.autoSave || readOnly || !activeFile || saveStatus === "saving") return;
+    if (activeFile.content === activeFile.savedContent) return;
+
+    const timeout = window.setTimeout(() => {
+      void handleSave(activeFile.id);
+    }, editorSettings.autoSaveDelay);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [
+    activeFile,
+    editorSettings.autoSaveDelay,
+    editorSettings.autoSave,
+    handleSave,
+    readOnly,
+    saveStatus,
+  ]);
 
   const handleCreateFile = useCallback(async (path: string) => {
     if (!projectId || readOnly) return;
@@ -587,6 +676,10 @@ export default function IDEPage() {
         e.preventDefault();
         setShowTerminal((v) => !v);
       }
+      if (ctrl && e.key === ",") {
+        e.preventDefault();
+        setShowEditorSettings(true);
+      }
 
       if (alt && e.key === "w") {
         e.preventDefault();
@@ -615,6 +708,9 @@ export default function IDEPage() {
 
   const langLabel = activeFile ? (LANGUAGE_DISPLAY[activeFile.language] ?? activeFile.language) : "";
   const initials = useMemo(() => (role === "OWNER" ? "OW" : role === "WRITER" ? "ED" : "RD"), [role]);
+  const updateEditorSettings = useCallback((next: EditorSettings) => {
+    setEditorSettings(next);
+  }, []);
 
   return (
     <div className="h-full flex flex-col bg-[#1e1e1e] text-white overflow-hidden">
@@ -664,6 +760,14 @@ export default function IDEPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showEditorSettings && (
+        <EditorDashboard
+          settings={editorSettings}
+          onChange={updateEditorSettings}
+          onClose={() => setShowEditorSettings(false)}
+        />
       )}
 
       <div className="h-11 bg-[#252526] border-b border-[#3e3e42] flex items-center justify-between px-3 flex-shrink-0">
@@ -756,6 +860,16 @@ export default function IDEPage() {
             <Bot className="w-4 h-4" />
           </Button>
 
+          <Button
+            size="icon"
+            variant="ghost"
+            className={`w-7 h-7 hover:bg-[#2a2d2e] ${showEditorSettings ? "text-indigo-400" : "text-gray-400 hover:text-white"}`}
+            onClick={() => setShowEditorSettings(true)}
+            title="Editor settings (Ctrl+,)"
+          >
+            <Settings className="w-4 h-4" />
+          </Button>
+
           <Avatar className="w-7 h-7 ml-1">
             <AvatarFallback className="bg-indigo-600 text-white text-xs">{initials}</AvatarFallback>
           </Avatar>
@@ -802,8 +916,7 @@ export default function IDEPage() {
                 value={activeFile.content}
                 language={activeFile.language}
                 onChange={handleCodeChange}
-                fontSize={editorFontSize}
-                tabSize={editorTabSize}
+                settings={editorSettings}
               />
             ) : (
               <div className="flex items-center justify-center h-full text-gray-600">
@@ -814,6 +927,7 @@ export default function IDEPage() {
                   <div className="text-xs opacity-50 space-y-1 mt-4">
                     <p>Ctrl+S · Save &nbsp;&nbsp; Ctrl+Enter · Run</p>
                     <p>Ctrl+B · Sidebar &nbsp;&nbsp; Ctrl+J · Terminal</p>
+                    <p>Ctrl+, · Settings</p>
                     <p>Alt+W · Close tab &nbsp;&nbsp; Alt+Tab · Next tab</p>
                   </div>
                 </div>
@@ -861,14 +975,7 @@ export default function IDEPage() {
       </div>
 
       <div className="h-6 bg-indigo-900/30 border-t border-[#3e3e42] flex items-center px-3 gap-4 flex-shrink-0">
-        {[
-          ["Ctrl+S", "Save"],
-          ["Ctrl+Enter", "Run"],
-          ["Ctrl+B", "Sidebar"],
-          ["Ctrl+J", "Terminal"],
-          ["Alt+W", "Close tab"],
-          ["Alt+Tab", "Next tab"],
-        ].map(([key, label]) => (
+        {KEYBINDING_PREVIEWS[editorSettings.keybinding].map(([key, label]) => (
           <span key={key} className="flex items-center gap-1 text-xs text-gray-500">
             <kbd className="px-1 py-0 bg-[#3e3e42] rounded text-gray-400 text-[10px]">{key}</kbd>
             {label}
