@@ -1,0 +1,172 @@
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
+import { Plus, FolderGit2, Clock, Users } from "lucide-react";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import ProjectCard from "../components/ProjectCard";
+import { createProject, listOwnedProjects, listSharedProjects, type Project } from "../../lib/projects";
+import { getStoredUser } from "../../lib/auth";
+
+export default function Dashboard() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [ownedProjects, setOwnedProjects] = useState<Project[]>([]);
+  const [sharedProjects, setSharedProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
+
+  const user = getStoredUser();
+
+  const refresh = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [owned, shared] = await Promise.all([listOwnedProjects(), listSharedProjects()]);
+      setOwnedProjects(owned);
+      setSharedProjects(shared);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load projects");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const allProjects = useMemo(() => {
+    const merged = [...ownedProjects, ...sharedProjects];
+    return merged.sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
+  }, [ownedProjects, sharedProjects]);
+
+  const displayedProjects = useMemo(() => {
+    if (location.pathname === "/app/projects") return ownedProjects;
+    if (location.pathname === "/app/shared") return sharedProjects;
+    return allProjects;
+  }, [location.pathname, ownedProjects, sharedProjects, allProjects]);
+
+  const sectionTitle = location.pathname === "/app/projects"
+    ? "My Projects"
+    : location.pathname === "/app/shared"
+      ? "Shared Projects"
+      : "Recent Projects";
+
+  const handleCreateProject = async () => {
+    const name = window.prompt("Project name", "New Project")?.trim();
+    if (!name) return;
+
+    setCreating(true);
+    setError("");
+    try {
+      const created = await createProject(name);
+      navigate(`/app/ide/${created._id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create project");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div className="p-8 max-w-7xl mx-auto">
+      {/* Welcome Section */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2 text-white">Welcome back, {user?.name || "Developer"}! 👋</h1>
+        <p className="text-gray-400">Here's what's happening with your projects today.</p>
+      </div>
+
+      {error && (
+        <Card className="bg-red-950/30 border-red-800 text-red-300 p-4 mb-6">
+          {error}
+        </Card>
+      )}
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <Card className="bg-gradient-to-br from-indigo-600 to-indigo-700 border-0 p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-indigo-200 text-sm mb-1">Total Projects</p>
+              <p className="text-3xl font-bold">{allProjects.length}</p>
+            </div>
+            <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
+              <FolderGit2 className="w-6 h-6" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-purple-600 to-purple-700 border-0 p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-purple-200 text-sm mb-1">Active Projects</p>
+              <p className="text-3xl font-bold">{ownedProjects.length}</p>
+            </div>
+            <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
+              <Clock className="w-6 h-6" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-pink-600 to-pink-700 border-0 p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-pink-200 text-sm mb-1">Collaborations</p>
+              <p className="text-3xl font-bold">{sharedProjects.length}</p>
+            </div>
+            <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
+              <Users className="w-6 h-6" />
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Recent Projects Section */}
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-white">{sectionTitle}</h2>
+        <Button className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={handleCreateProject} disabled={creating}>
+          <Plus className="w-5 h-5 mr-2" />
+          {creating ? "Creating..." : "New Project"}
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {!loading && displayedProjects.length === 0 && (
+          <Card className="bg-white/5 border-white/10 p-6 text-gray-300">
+            No projects yet. Create one to get started.
+          </Card>
+        )}
+        {displayedProjects.map((project) => (
+          <ProjectCard key={project._id} project={project} />
+        ))}
+      </div>
+
+      {/* Quick Actions */}
+      <div className="mt-12">
+        <h2 className="text-2xl font-bold text-white mb-6">Quick Actions</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card className="bg-white/5 border-white/10 p-6 hover:bg-white/10 transition-colors cursor-pointer">
+            <h3 className="text-lg font-semibold text-white mb-2">Import from GitHub</h3>
+            <p className="text-gray-400 text-sm mb-4">
+              Clone an existing repository and start working immediately
+            </p>
+            <Button variant="outline" className="border-white/20 text-white hover:bg-white/5">
+              Import Repository
+            </Button>
+          </Card>
+
+          <Card className="bg-white/5 border-white/10 p-6 hover:bg-white/10 transition-colors cursor-pointer">
+            <h3 className="text-lg font-semibold text-white mb-2">Browse Templates</h3>
+            <p className="text-gray-400 text-sm mb-4">
+              Start from a pre-built template for React, Node.js, Python, and more
+            </p>
+            <Button variant="outline" className="border-white/20 text-white hover:bg-white/5">
+              View Templates
+            </Button>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}

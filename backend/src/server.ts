@@ -7,18 +7,20 @@ import { projectRouter } from "./routes/project.routes";
 import { fileRouter } from "./routes/file.routes";
 import { shareRouter } from "./routes/share.routes";
 import { executionRouter } from "./routes/execution.routes";
+import { aiRouter } from "./routes/ai.routes";
 
 dotenv.config();
 const app = express();
 
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
 
 app.use("/auth", authRouter);
 app.use("/projects", projectRouter);
 app.use(fileRouter);
 app.use(shareRouter);
 app.use(executionRouter);
+app.use("/ai", aiRouter);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
