@@ -47,7 +47,6 @@ export default function DashboardLayout() {
     { path: "/app", label: "Dashboard", icon: LayoutDashboard },
     { path: "/app/projects", label: "My Projects", icon: FolderGit2 },
     { path: "/app/shared", label: "Shared Projects", icon: Users },
-    { path: "/app/ai-assistant", label: "AI Assistant", icon: Sparkles },
     { path: "/app/settings", label: "Settings", icon: Settings },
   ];
 

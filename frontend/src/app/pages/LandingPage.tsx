@@ -64,7 +64,7 @@ export default function LandingPage() {
             </Link>
             <Link to="/signup">
               <Button className="bg-indigo-600 hover:bg-indigo-700 text-white">
-                Get Started
+                Sign Up
               </Button>
             </Link>
           </div>
@@ -80,42 +80,43 @@ export default function LandingPage() {
           </h1>
           
           <p className="text-xl text-gray-300 max-w-2xl mx-auto">
-            Write, run, and collaborate on code directly in your browser. 
-            No local setup, no configuration hassles. Just pure development magic with AI assistance.
+            Write, run, and collaborate on code directly in your browser.
           </p>
 
           <div className="flex items-center gap-4 justify-center pt-4">
             <Link to="/signup">
               <Button className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-6 text-lg">
-                Get Started Free
+                Sign Up
                 <ArrowRight className="w-5 h-5 ml-2" />
               </Button>
             </Link>
             <Link to="/app">
               <Button variant="outline" className="border-white/20 text-white hover:bg-white/10 px-8 py-6 text-lg">
-                Try Demo
+                Sign In
               </Button>
             </Link>
           </div>
 
           {/* Mock IDE Screenshot */}
-          <div className="mt-16 rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-[#1e1e1e]">
+          <div className="mt-16 mx-auto w-full md:w-4/5 lg:w-3/5 rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-[#1e1e1e]">
             <div className="bg-[#252526] px-4 py-3 border-b border-white/10 flex items-center gap-2">
               <div className="flex gap-2">
                 <div className="w-3 h-3 rounded-full bg-red-500"></div>
                 <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
                 <div className="w-3 h-3 rounded-full bg-green-500"></div>
               </div>
-              <span className="text-sm text-gray-400 ml-4">src/App.tsx</span>
+              <span className="text-sm text-gray-400 ml-4">main.py</span>
             </div>
             <div className="p-6 text-left font-mono text-sm">
               <div className="space-y-2">
-                <div><span className="text-purple-400">import</span> <span className="text-blue-300">React</span> <span className="text-purple-400">from</span> <span className="text-green-400">'react'</span>;</div>
-                <div><span className="text-purple-400">import</span> {'{ useState }'} <span className="text-purple-400">from</span> <span className="text-green-400">'react'</span>;</div>
-                <div className="mt-4"><span className="text-purple-400">function</span> <span className="text-yellow-300">App</span>() {'{'}</div>
-                <div className="ml-4"><span className="text-purple-400">const</span> [count, setCount] = <span className="text-yellow-300">useState</span>(<span className="text-orange-400">0</span>);</div>
-                <div className="ml-4"><span className="text-purple-400">return</span> {'<div>Hello World</div>'}</div>
-                <div>{'}'}</div>
+                <div><span className="text-purple-400">def</span> <span className="text-yellow-300">fibonacci</span>(<span className="text-blue-300">n</span>):</div>
+                <div className="ml-4"><span className="text-purple-400">if</span> n {"<="} <span className="text-orange-400">1</span>:</div>
+                <div className="ml-8"><span className="text-purple-400">return</span> n</div>
+                <div className="ml-4"><span className="text-purple-400">return</span> <span className="text-yellow-300">fibonacci</span>(n - <span className="text-orange-400">1</span>) + <span className="text-yellow-300">fibonacci</span>(n - <span className="text-orange-400">2</span>)</div>
+
+                <div className="mt-4"><span className="text-blue-300">num</span> = <span className="text-orange-400">6</span></div>
+                <div><span className="text-blue-300">result</span> = <span className="text-yellow-300">fibonacci</span>(num)</div>
+                <div><span className="text-yellow-300">print</span>(<span className="text-green-400">f"Fibonacci of {'{'}num{'}'} is {'{'}result{'}'}"</span>)</div>
               </div>
             </div>
           </div>
@@ -126,7 +127,7 @@ export default function LandingPage() {
       <section className="max-w-7xl mx-auto px-6 py-20">
         <div className="text-center mb-16">
           <h2 className="text-4xl font-bold mb-4">Everything you need to code</h2>
-          <p className="text-xl text-gray-400">Powerful features for modern development teams</p>
+          <p className="text-xl text-gray-400">Powerful features for development teams</p>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">

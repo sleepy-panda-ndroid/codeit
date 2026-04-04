@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { Plus, FolderGit2, Clock, Users } from "lucide-react";
+import { Plus, FolderGit2, Clock, Users, X, FolderPlus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import ProjectCard from "../components/ProjectCard";
 import { createProject, listOwnedProjects, listSharedProjects, type Project } from "../../lib/projects";
 import { getStoredUser } from "../../lib/auth";
+import CreateProjectModal from "../components/CreateProjectModal";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -15,6 +16,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const user = getStoredUser();
 
@@ -53,14 +55,22 @@ export default function Dashboard() {
       ? "Shared Projects"
       : "Recent Projects";
 
-  const handleCreateProject = async () => {
-    const name = window.prompt("Project name", "New Project")?.trim();
-    if (!name) return;
+  const handleCreateProject = () => {
+    setIsCreateModalOpen(true);
+  };
 
+  const handleConfirmCreateProject = async ({
+    name,
+    description,
+  }: {
+    name: string;
+    description: string;
+  }) => {
     setCreating(true);
     setError("");
     try {
-      const created = await createProject(name);
+      const created = await createProject(name, description);
+      setIsCreateModalOpen(false);
       navigate(`/app/ide/${created._id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create project");
@@ -100,7 +110,7 @@ export default function Dashboard() {
         <Card className="bg-gradient-to-br from-purple-600 to-purple-700 border-0 p-6 text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-purple-200 text-sm mb-1">Active Projects</p>
+              <p className="text-purple-200 text-sm mb-1">Your Projects</p>
               <p className="text-3xl font-bold">{ownedProjects.length}</p>
             </div>
             <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
@@ -134,7 +144,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {!loading && displayedProjects.length === 0 && (
           <Card className="bg-white/5 border-white/10 p-6 text-gray-300">
-            No projects yet. Create one to get started.
+            No projects yet. Create one or Contact your team lead.
           </Card>
         )}
         {displayedProjects.map((project) => (
@@ -142,31 +152,14 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Quick Actions */}
-      <div className="mt-12">
-        <h2 className="text-2xl font-bold text-white mb-6">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="bg-white/5 border-white/10 p-6 hover:bg-white/10 transition-colors cursor-pointer">
-            <h3 className="text-lg font-semibold text-white mb-2">Import from GitHub</h3>
-            <p className="text-gray-400 text-sm mb-4">
-              Clone an existing repository and start working immediately
-            </p>
-            <Button variant="outline" className="border-white/20 text-white hover:bg-white/5">
-              Import Repository
-            </Button>
-          </Card>
-
-          <Card className="bg-white/5 border-white/10 p-6 hover:bg-white/10 transition-colors cursor-pointer">
-            <h3 className="text-lg font-semibold text-white mb-2">Browse Templates</h3>
-            <p className="text-gray-400 text-sm mb-4">
-              Start from a pre-built template for React, Node.js, Python, and more
-            </p>
-            <Button variant="outline" className="border-white/20 text-white hover:bg-white/5">
-              View Templates
-            </Button>
-          </Card>
-        </div>
-      </div>
+      <CreateProjectModal
+        open={isCreateModalOpen}
+        onClose={() => {
+          if (!creating) setIsCreateModalOpen(false);
+        }}
+        loading={creating}
+        onCreate={handleConfirmCreateProject}
+      />
     </div>
   );
 }

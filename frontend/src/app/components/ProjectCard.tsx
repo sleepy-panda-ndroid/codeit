@@ -40,7 +40,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
           <h3 className="text-lg font-semibold text-white mb-1 group-hover:text-indigo-400 transition-colors">
             {project.name}
           </h3>
-          <p className="text-sm text-gray-400 line-clamp-2 mb-3">Project role and visibility managed via backend access controls.</p>
+          <p className="text-sm text-gray-400 line-clamp-2 mb-3">{project.description}</p>
         </div>
         <Button
           variant="ghost"

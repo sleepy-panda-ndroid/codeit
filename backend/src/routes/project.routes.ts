@@ -10,6 +10,7 @@ export const projectRouter = Router();
 
 const createSchema = z.object({
   name: z.string().min(1).max(100),
+  description: z.string().max(2000).optional(),
 });
 
 const patchSchema = z.object({
@@ -26,6 +27,7 @@ projectRouter.post("/", authJwt, async (req: any, res) => {
 
   const project = await Project.create({
     name: parsed.data.name,
+    description: parsed.data.description,
     ownerId: req.userId,
   });
 

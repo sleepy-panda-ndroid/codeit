@@ -59,7 +59,7 @@ export default function SignupPage() {
           </h1>
           
           <p className="text-lg text-gray-300">
-            Join thousands of developers who build, test, and deploy code directly from the browser.
+            Join thousands of developers who build projects directly from the browser.
           </p>
 
           <div className="mt-12 space-y-6">
@@ -68,8 +68,12 @@ export default function SignupPage() {
               <p className="text-sm text-gray-400">No credit card required to get started</p>
             </div>
             <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-              <p className="text-2xl font-bold text-purple-400 mb-1">5 Projects</p>
-              <p className="text-sm text-gray-400">Create and manage multiple projects</p>
+              <p className="text-2xl font-bold text-purple-400 mb-1"> No Local Storage</p>
+              <p className="text-sm text-gray-400">Create and manage projects online</p>
+            </div>
+            <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+              <p className="text-2xl font-bold text-teal-400 mb-1">Collaboration</p>
+              <p className="text-sm text-gray-400">Collaborate with your team</p>
             </div>
             <div className="bg-white/5 rounded-lg p-4 border border-white/10">
               <p className="text-2xl font-bold text-pink-400 mb-1">AI Assistant</p>
@@ -84,7 +88,7 @@ export default function SignupPage() {
         <Card className="w-full max-w-md bg-white/5 border-white/10 p-8">
           <div className="mb-8 text-center">
             <h2 className="text-3xl font-bold mb-2">Create your account</h2>
-            <p className="text-gray-400">Get started with codeIT for free</p>
+            <p className="text-gray-400">Get started with codeIT</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">

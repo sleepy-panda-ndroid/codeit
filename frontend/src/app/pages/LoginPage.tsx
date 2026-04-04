@@ -79,7 +79,7 @@ export default function LoginPage() {
               </div>
               <div>
                 <p className="font-medium">Team collaboration</p>
-                <p className="text-sm text-gray-400">Work together in real-time</p>
+                <p className="text-sm text-gray-400">Work together as a team</p>
               </div>
             </div>
           </div>
@@ -111,9 +111,6 @@ export default function LoginPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password" className="text-white">Password</Label>
-                <a href="#" className="text-sm text-indigo-400 hover:text-indigo-300">
-                  Forgot password?
-                </a>
               </div>
               <Input
                 id="password"
@@ -129,9 +126,14 @@ export default function LoginPage() {
             <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white" disabled={loading}>
               {loading ? "Signing in..." : "Sign In"}
             </Button>
-
+            <div className="relative flex justify-center text-sm">
+              <a href="#" className="text-sm text-indigo-400 hover:text-indigo-300">
+                  Forgot password?
+              </a>
+            </div>
             {error && <p className="text-sm text-red-400">{error}</p>}
           </form>
+
 
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">

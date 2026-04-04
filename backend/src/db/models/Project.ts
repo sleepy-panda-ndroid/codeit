@@ -4,6 +4,7 @@ const ProjectSchema = new Schema(
   {
     name: { type: String, required: true },
     ownerId: { type: Schema.Types.ObjectId, required: true, ref: "User" },
+    description: {type: String, required: false},
     visibility: {
       type: String,
       enum: ["PRIVATE", "PUBLIC", "UNLISTED"],

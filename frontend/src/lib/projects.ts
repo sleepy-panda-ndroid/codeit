@@ -8,6 +8,7 @@ export type Project = {
   name: string;
   visibility: ProjectVisibility;
   ownerId: string;
+  description: string;
   role: ProjectRole;
   createdAt: string;
   updatedAt: string;
@@ -35,10 +36,10 @@ export async function listSharedProjects() {
   return apiFetch<Project[]>("/projects/shared");
 }
 
-export async function createProject(name: string) {
+export async function createProject(name: string, description: string) {
   return apiFetch<Project>("/projects", {
     method: "POST",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name , description}),
   });
 }
 
