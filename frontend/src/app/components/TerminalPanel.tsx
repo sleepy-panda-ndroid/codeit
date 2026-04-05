@@ -218,15 +218,12 @@ export default function TerminalPanel({ onClose, isRunning, executionResult, std
           </div>
         </div>
 
-        <TabsContent value="terminal" className="flex-1 overflow-auto m-0 p-4 font-mono text-sm">
-          {terminalLines.map((line, i) => (
-            <div key={i} className={getTextColor(line.type)}>
-              {line.text || "\u00A0"}
-            </div>
-          ))}
-          <div className="flex items-center mt-2">
-            <span className="text-green-400 mr-2">$</span>
-            <span className="border-l-2 border-white animate-pulse ml-0.5 h-4" />
+        <TabsContent
+          value="terminal"
+          className="flex-1 m-0 flex items-center justify-center"
+        >
+          <div className="text-gray-500 text-sm">
+            Terminal will be implemented later
           </div>
         </TabsContent>
 

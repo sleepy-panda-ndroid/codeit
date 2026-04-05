@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { boolean, z } from "zod";
+import { z } from "zod";
 import { authJwt } from "../middleware/authJwt";
 import { requireProjectRole } from "../middleware/requireProjectRole";
 import { Project } from "../db/models/Project";
@@ -35,6 +35,7 @@ projectRouter.post("/", authJwt, async (req: any, res) => {
     projectId: project._id,
     userId: req.userId,
     role: "OWNER",
+    status: "ACCEPTED",
   });
 
   res.status(201).json(project);
@@ -42,7 +43,10 @@ projectRouter.post("/", authJwt, async (req: any, res) => {
 
 // List all accessible projects
 projectRouter.get("/", authJwt, async (req: any, res) => {
-  const accessRows = await ProjectAccess.find({ userId: req.userId })
+  const accessRows = await ProjectAccess.find({
+    userId: req.userId,
+    status: "ACCEPTED",
+  })
     .select("projectId role")
     .lean();
 
@@ -79,6 +83,7 @@ projectRouter.get("/shared", authJwt, async (req: any, res) => {
   const accessRows = await ProjectAccess.find({
     userId: req.userId,
     role: { $in: ["READER", "WRITER"] },
+    status: "ACCEPTED",
   })
     .select("projectId role")
     .lean();
@@ -139,7 +144,7 @@ projectRouter.delete(
     await FileModel.deleteMany({ projectId });
 
     // later:
-    // await InviteModel.deleteMany({ projectId });
+    // await Notification.deleteMany({ projectId });
 
     res.json({ ok: true });
   }
@@ -155,6 +160,7 @@ projectRouter.get(
     if (!project) {
       return res.status(404).json({ error: "Project not found" });
     }
+
     res.json({
       project,
       role: req.projectRole,

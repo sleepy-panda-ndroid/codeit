@@ -49,6 +49,7 @@ export default function Dashboard() {
     return allProjects;
   }, [location.pathname, ownedProjects, sharedProjects, allProjects]);
 
+  
   const sectionTitle = location.pathname === "/app/projects"
     ? "My Projects"
     : location.pathname === "/app/shared"
@@ -148,8 +149,13 @@ export default function Dashboard() {
           </Card>
         )}
         {displayedProjects.map((project) => (
-          <ProjectCard key={project._id} project={project} />
-        ))}
+        <ProjectCard
+          key={project._id}
+          project={project}
+          onProjectUpdated={refresh}
+          onProjectDeleted={refresh}
+        />
+      ))}
       </div>
 
       <CreateProjectModal

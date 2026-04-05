@@ -8,6 +8,7 @@ import { fileRouter } from "./routes/file.routes";
 import { shareRouter } from "./routes/share.routes";
 import { executionRouter } from "./routes/execution.routes";
 import { aiRouter } from "./routes/ai.routes";
+import { notificationRouter } from "./routes/notification.routes";
 
 dotenv.config();
 const app = express();
@@ -21,6 +22,7 @@ app.use(fileRouter);
 app.use(shareRouter);
 app.use(executionRouter);
 app.use("/ai", aiRouter);
+app.use(notificationRouter);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });

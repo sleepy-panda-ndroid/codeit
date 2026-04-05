@@ -34,6 +34,8 @@ import {
   getStoredUser,
   setAuthSession,
 } from "../../lib/auth";
+import { getNotificationCount } from "../../lib/notification";
+
 
 export default function DashboardLayout() {
   const location = useLocation();
@@ -42,11 +44,13 @@ export default function DashboardLayout() {
   const [userName, setUserName] = useState("User");
   const [userEmail, setUserEmail] = useState("user@example.com");
   const [userAvatar, setUserAvatar] = useState("");
+  const [notificationCount, setNotificationCount] = useState(0);
 
   const navItems = [
     { path: "/app", label: "Dashboard", icon: LayoutDashboard },
     { path: "/app/projects", label: "My Projects", icon: FolderGit2 },
     { path: "/app/shared", label: "Shared Projects", icon: Users },
+    { path: "/app/notifications", label: "Notifications", icon: Bell },
     { path: "/app/settings", label: "Settings", icon: Settings },
   ];
 
@@ -91,6 +95,9 @@ export default function DashboardLayout() {
         setUserEmail(me.email || "user@example.com");
         setUserAvatar(me.avatarDataUrl || "");
         setAuthSession(token, me);
+        getNotificationCount()
+        .then((data) => setNotificationCount(data.count))
+        .catch(() => setNotificationCount(0));
       })
       .catch(() => {
         clearAuthSession();
@@ -187,9 +194,14 @@ export default function DashboardLayout() {
               variant="ghost"
               size="icon"
               className="text-gray-300 hover:text-white hover:bg-[#2a2d2e] relative"
+              onClick={() => navigate("/app/notifications")}
             >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-indigo-500 rounded-full"></span>
+              {notificationCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-indigo-600 text-[10px] font-semibold text-white flex items-center justify-center">
+                  {notificationCount > 9 ? "9+" : notificationCount}
+                </span>
+              )}
             </Button>
 
             <DropdownMenu>

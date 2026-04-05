@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router";
 import {
   Play,
   Save,
-  Share2,
   File,
   Loader2,
   PanelLeftClose,
@@ -840,17 +839,6 @@ export default function IDEPage() {
           </Button>
 
           <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2.5 text-xs text-gray-300 hover:text-white hover:bg-[#2a2d2e]"
-            title="Share project"
-            onClick={() => navigate(`/app/collaboration/${projectId}`)}
-          >
-            <Share2 className="w-3.5 h-3.5 mr-1.5" />
-            Share
-          </Button>
-
-          <Button
             size="icon"
             variant="ghost"
             className={`w-7 h-7 hover:bg-[#2a2d2e] ${showAIPanel ? "text-indigo-400" : "text-gray-400 hover:text-white"}`}
@@ -917,6 +905,7 @@ export default function IDEPage() {
                 language={activeFile.language}
                 onChange={handleCodeChange}
                 settings={editorSettings}
+                readOnly={readOnly}
               />
             ) : (
               <div className="flex items-center justify-center h-full text-gray-600">

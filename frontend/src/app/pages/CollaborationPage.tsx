@@ -9,9 +9,8 @@ import {
   Edit,
   Crown,
   ArrowLeft,
-  Copy,
-  Check,
   Loader2,
+  Clock3,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -21,11 +20,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import {
   listProjectMembers,
+  listProjectInvitations,
   removeProjectMember,
   shareProject,
   updateProjectMemberRole,
   getProject,
   type ProjectMember,
+  type ProjectInvitation,
 } from "../../lib/projects";
 
 export default function CollaborationPage() {
@@ -34,7 +35,7 @@ export default function CollaborationPage() {
   const [projectName, setProjectName] = useState("Project");
   const [projectRole, setProjectRole] = useState<"OWNER" | "WRITER" | "READER">("READER");
   const [members, setMembers] = useState<ProjectMember[]>([]);
-
+  const [invitations, setInvitations] = useState<ProjectInvitation[]>([]);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"READER" | "WRITER">("READER");
   const [linkCopied, setLinkCopied] = useState(false);
@@ -50,14 +51,22 @@ export default function CollaborationPage() {
     setError("");
 
     try {
-      const [detail, memberList] = await Promise.all([
-        getProject(projectId),
-        listProjectMembers(projectId),
-      ]);
+      const detail = await getProject(projectId);
 
       setProjectName(detail.project.name);
       setProjectRole(detail.role);
+
+      const acceptedPromise = listProjectMembers(projectId);
+      const pendingPromise =
+        detail.role === "OWNER" ? listProjectInvitations(projectId) : Promise.resolve([]);
+
+      const [memberList, pendingList] = await Promise.all([
+        acceptedPromise,
+        pendingPromise,
+      ]);
+
       setMembers(memberList);
+      setInvitations(pendingList);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load collaboration data");
     } finally {
@@ -83,7 +92,7 @@ export default function CollaborationPage() {
       setRole("READER");
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to invite collaborator");
+        setError(err instanceof Error ? err.message : "Failed to send invitation");
     } finally {
       setSubmitting(false);
     }
@@ -152,103 +161,128 @@ export default function CollaborationPage() {
             <ArrowLeft className="w-4 h-4" />
             Back to Dashboard
           </Link>
-          <h1 className="text-3xl font-bold text-white mb-2">Project Collaboration</h1>
-          <p className="text-gray-400">Manage access and permissions for "{projectName}"</p>
+          <h1 className="text-3xl font-bold text-white mb-2">Project Members & Access</h1>
+          <p className="text-gray-400">Manage members and permissions for "{projectName}"</p>
         </div>
 
         {error && (
           <Card className="bg-red-950/30 border-red-800 text-red-300 p-4 mb-6">{error}</Card>
         )}
 
-        <Card className="bg-[#252526] border-[#3e3e42] p-6 mb-6">
-          <h2 className="text-xl font-semibold text-white mb-4">Share Project</h2>
-          <div className="flex gap-2">
-            <Input
-              value={`${window.location.origin}/app/ide/${projectId}`}
-              readOnly
-              className="bg-[#1e1e1e] border-[#3e3e42] text-gray-300"
-            />
-            <Button onClick={copyShareLink} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-              {linkCopied ? (
-                <>
-                  <Check className="w-4 h-4 mr-2" />
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4 mr-2" />
-                  Copy Link
-                </>
-              )}
-            </Button>
-          </div>
-        </Card>
+        {canManage && (
+          <Card className="bg-[#252526] border-[#3e3e42] p-6 mb-6">
+            <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+              <UserPlus className="w-5 h-5" />
+              Add Collaborator
+            </h2>
 
-        <Card className="bg-[#252526] border-[#3e3e42] p-6 mb-6">
-          <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-            <UserPlus className="w-5 h-5" />
-            Invite Collaborator
-          </h2>
+            <form onSubmit={handleInvite} className="space-y-4">
+              <div>
+                <Label htmlFor="email" className="text-white mb-2">Email Address</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="colleague@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="bg-[#1e1e1e] border-[#3e3e42] text-white placeholder:text-gray-500"
+                  required
+                />
+              </div>
 
-          <form onSubmit={handleInvite} className="space-y-4">
-            <div>
-              <Label htmlFor="email" className="text-white mb-2">Email Address</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="colleague@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="bg-[#1e1e1e] border-[#3e3e42] text-white placeholder:text-gray-500"
-                required
-                disabled={!canManage || submitting}
-              />
-            </div>
+              <div>
+                <Label className="text-white mb-2">Role</Label>
+                <Select value={role} onValueChange={(value: "READER" | "WRITER") => setRole(value)}>
+                  <SelectTrigger className="bg-[#1e1e1e] border-[#3e3e42] text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#252526] border-[#3e3e42] text-white">
+                    <SelectItem value="READER">Reader</SelectItem>
+                    <SelectItem value="WRITER">Writer</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div>
-              <Label htmlFor="role" className="text-white mb-2">Permission Level</Label>
-              <Select value={role} onValueChange={(value: "READER" | "WRITER") => setRole(value)} disabled={!canManage || submitting}>
-                <SelectTrigger className="bg-[#1e1e1e] border-[#3e3e42] text-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-[#252526] border-[#3e3e42] text-white">
-                  <SelectItem value="READER">
-                    <div className="flex items-center gap-2">
-                      <Eye className="w-4 h-4 text-gray-400" />
-                      <div>
-                        <p className="font-medium">Viewer</p>
-                        <p className="text-xs text-gray-400">Can view code but not edit</p>
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  "Add Collaborator"
+                )}
+              </Button>
+            </form>
+          </Card>
+        )}
+        {!canManage && !loading && (
+          <Card className="bg-[#252526] border-[#3e3e42] p-4 mb-6 text-sm text-gray-300">
+            You can view project members here. Only the owner can add collaborators, remove members, or change roles.
+          </Card>
+        )}
+        {canManage && (
+          <Card className="bg-[#252526] border-[#3e3e42] p-6 mb-6">
+            <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+              <Mail className="w-5 h-5" />
+              Pending Invitations ({invitations.length})
+            </h2>
+
+            {invitations.length === 0 ? (
+              <div className="text-sm text-gray-400">
+                No pending invitations right now.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {invitations.map((invite) => (
+                  <div
+                    key={invite.id}
+                    className="flex items-center justify-between p-4 bg-[#1e1e1e] rounded-lg border border-[#3e3e42]"
+                  >
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-medium shrink-0">
+                        {getInitials(invite.user.name || invite.user.email)}
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-white truncate">
+                            {invite.user.name || "Unnamed User"}
+                          </p>
+                          <span className="px-2 py-0.5 bg-amber-600/20 text-amber-400 text-xs rounded border border-amber-600/30">
+                            Pending
+                          </span>
+                          <span className="px-2 py-0.5 bg-[#252526] text-gray-300 text-xs rounded border border-[#3e3e42]">
+                            {invite.role === "WRITER" ? "Editor" : "Viewer"}
+                          </span>
+                        </div>
+
+                        <p className="text-sm text-gray-400 truncate">{invite.user.email}</p>
+
+                        <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                          <Clock3 className="w-3.5 h-3.5" />
+                          Invited {new Date(invite.invitedAt).toLocaleString()}
+                        </p>
                       </div>
                     </div>
-                  </SelectItem>
-                  <SelectItem value="WRITER">
-                    <div className="flex items-center gap-2">
-                      <Edit className="w-4 h-4 text-blue-400" />
-                      <div>
-                        <p className="font-medium">Editor</p>
-                        <p className="text-xs text-gray-400">Can view and edit code</p>
-                      </div>
+
+                    <div className="text-xs text-gray-500 shrink-0">
+                      Awaiting response
                     </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white" disabled={!canManage || submitting}>
-              {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Mail className="w-4 h-4 mr-2" />}
-              {submitting ? "Sending Invitation..." : "Send Invitation"}
-            </Button>
-
-            {!canManage && (
-              <p className="text-xs text-gray-400">Only project owners can manage invitations and member roles.</p>
+                  </div>
+                ))}
+              </div>
             )}
-          </form>
-        </Card>
-
+          </Card>
+        )}
         <Card className="bg-[#252526] border-[#3e3e42] p-6">
           <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
             <Shield className="w-5 h-5" />
-            Team Members ({members.length})
+            Accepted Members ({members.length})
           </h2>
 
           {loading ? (

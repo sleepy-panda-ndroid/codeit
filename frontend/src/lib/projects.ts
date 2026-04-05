@@ -24,6 +24,22 @@ export type ProjectMember = {
   addedAt: string;
 };
 
+export type ProjectInvitation = {
+  id: string;
+  role: "READER" | "WRITER";
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  invitedBy: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  invitedAt: string;
+};
+
 export async function listProjects() {
   return apiFetch<Project[]>("/projects");
 }
@@ -39,12 +55,28 @@ export async function listSharedProjects() {
 export async function createProject(name: string, description: string) {
   return apiFetch<Project>("/projects", {
     method: "POST",
-    body: JSON.stringify({ name , description}),
+    body: JSON.stringify({ name, description }),
   });
 }
 
 export async function getProject(projectId: string) {
   return apiFetch<{ project: Omit<Project, "role">; role: ProjectRole }>(`/projects/${projectId}`);
+}
+
+export async function updateProject(
+  projectId: string,
+  updates: Partial<Pick<Project, "name" | "visibility">>,
+) {
+  return apiFetch<Project>(`/projects/${projectId}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function deleteProject(projectId: string) {
+  return apiFetch<{ ok: true }>(`/projects/${projectId}`, {
+    method: "DELETE",
+  });
 }
 
 export async function listProjectMembers(projectId: string) {
@@ -73,4 +105,10 @@ export async function removeProjectMember(projectId: string, userId: string) {
   return apiFetch<{ ok: true }>(`/projects/${projectId}/members/${userId}`, {
     method: "DELETE",
   });
+}
+
+
+
+export async function listProjectInvitations(projectId: string) {
+  return apiFetch<ProjectInvitation[]>(`/projects/${projectId}/invitations`);
 }

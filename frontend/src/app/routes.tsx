@@ -8,6 +8,7 @@ import CollaborationPage from "./pages/CollaborationPage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 import DashboardLayout from "./layouts/DashboardLayout";
+import NotificationsPage from "./pages/NotificationsPage";
 
 export const router = createBrowserRouter([
   {
@@ -29,6 +30,7 @@ export const router = createBrowserRouter([
       { index: true, Component: Dashboard },
       { path: "projects", Component: Dashboard },
       { path: "shared", Component: Dashboard },
+      { path: "notifications", Component: NotificationsPage },
       { path: "ide/:projectId", Component: IDEPage },
       { path: "collaboration/:projectId", Component: CollaborationPage },
       { path: "settings", Component: SettingsPage },

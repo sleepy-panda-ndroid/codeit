@@ -16,14 +16,18 @@ export function requireProjectRole(allowed: Role[]) {
       return res.status(400).json({ error: "Invalid project id" });
     }
 
-    const access = await ProjectAccess.findOne({ userId, projectId });
+    const access = await ProjectAccess.findOne({
+      userId,
+      projectId,
+      status: "ACCEPTED",
+    });
+
     if (!access) return res.status(403).json({ error: "No access" });
 
     if (!allowed.includes(access.role as Role)) {
       return res.status(403).json({ error: "Insufficient role", role: access.role });
     }
 
-    // optional: attach role for later use
     (req as any).projectRole = access.role;
 
     return next();
