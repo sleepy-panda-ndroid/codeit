@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import { connectMongo } from "./db/mongo";
 import { authRouter } from "./routes/auth.routes";
 import { projectRouter } from "./routes/project.routes";
-import { fileRouter } from "./routes/file.routes";
+import { nodeRouter } from "./routes/node.routes";
 import { shareRouter } from "./routes/share.routes";
 import { executionRouter } from "./routes/execution.routes";
 import { aiRouter } from "./routes/ai.routes";
@@ -23,7 +23,7 @@ app.use(express.json({ limit: "5mb" }));
 
 app.use("/auth", authRouter);
 app.use("/projects", projectRouter);
-app.use(fileRouter);
+app.use(nodeRouter);
 app.use(shareRouter);
 app.use(executionRouter);
 app.use("/ai", aiRouter);

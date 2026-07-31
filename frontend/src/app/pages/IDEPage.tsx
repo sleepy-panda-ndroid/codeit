@@ -25,30 +25,30 @@ import EditorDashboard, { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from ".
 import EditorTabs from "../components/EditorTabs";
 
 import {
-  createFile,
-  deleteFile,
-  listFiles,
-  renameFile,
-  saveFile,
-  type ProjectFile,
-} from "../../lib/files";
+  createNode,
+  deleteNode,
+  listNodes,
+  renameNode,
+  saveNode,
+  type ProjectNode,
+  type NodeType,
+} from "../../lib/nodes";
 
 import { executeProjectCode, type ExecutionLanguage } from "../../lib/execution";
 import { getProject } from "../../lib/projects";
 
 interface OpenFile {
-  id: string;
+  id: string; // node id
   name: string;
-  path: string;
   language: string;
   content: string;
   savedContent: string;
 }
 
 interface PersistedIdeState {
-  openPaths: string[];
-  activePath: string;
-  drafts: Record<string, string>;
+  openIds: string[];
+  activeId: string;
+  drafts: Record<string, string>; // keyed by node id
   stdin?: string;
   layout: {
     showSidebar: boolean;
@@ -123,8 +123,9 @@ const LANGUAGE_DISPLAY: Record<string, string> = {
   plaintext: "Plain Text",
 };
 
-function getLanguageFromPath(path: string): string {
-  const p = path.toLowerCase();
+// Language is derived from the node name (which carries the extension).
+function languageFromName(name: string): string {
+  const p = name.toLowerCase();
 
   if (p.endsWith(".tsx") || p.endsWith(".ts")) return "typescript";
   if (p.endsWith(".jsx") || p.endsWith(".js")) return "javascript";
@@ -140,8 +141,8 @@ function getLanguageFromPath(path: string): string {
   return "plaintext";
 }
 
-function getExecutionLanguage(path: string): ExecutionLanguage | null {
-  const p = path.toLowerCase();
+function executionLanguageFromName(name: string): ExecutionLanguage | null {
+  const p = name.toLowerCase();
 
   if (p.endsWith(".cpp") || p.endsWith(".cc") || p.endsWith(".cxx")) return "cpp";
   if (p.endsWith(".c")) return "c";
@@ -152,16 +153,34 @@ function getExecutionLanguage(path: string): ExecutionLanguage | null {
   return null;
 }
 
-function mapProjectFileToOpenFile(file: ProjectFile): OpenFile {
-  const parts = file.path.split("/");
+function mapNodeToOpenFile(node: ProjectNode): OpenFile {
   return {
-    id: file.path,
-    name: parts[parts.length - 1] || file.path,
-    path: file.path,
-    language: getLanguageFromPath(file.path),
-    content: file.content,
-    savedContent: file.content,
+    id: node.id,
+    name: node.name,
+    language: languageFromName(node.name),
+    content: node.content,
+    savedContent: node.content,
   };
+}
+
+// Given the flat node list, collect a node id plus all its descendant ids.
+function collectLocalSubtreeIds(nodes: ProjectNode[], rootId: string): Set<string> {
+  const childrenByParent = new Map<string | null, string[]>();
+  nodes.forEach((n) => {
+    const parent = n.parentId ?? null;
+    if (!childrenByParent.has(parent)) childrenByParent.set(parent, []);
+    childrenByParent.get(parent)!.push(n.id);
+  });
+
+  const result = new Set<string>();
+  const stack = [rootId];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (result.has(id)) continue;
+    result.add(id);
+    for (const childId of childrenByParent.get(id) ?? []) stack.push(childId);
+  }
+  return result;
 }
 
 function mapExecutionResultToTerminal(result: Awaited<ReturnType<typeof executeProjectCode>>): ExecutionResult {
@@ -199,8 +218,8 @@ function loadPersistedIdeState(projectId: string): PersistedIdeState | null {
     if (!parsed || typeof parsed !== "object") return null;
 
     return {
-      openPaths: Array.isArray(parsed.openPaths) ? parsed.openPaths.filter((item): item is string => typeof item === "string") : [],
-      activePath: typeof parsed.activePath === "string" ? parsed.activePath : "",
+      openIds: Array.isArray(parsed.openIds) ? parsed.openIds.filter((item): item is string => typeof item === "string") : [],
+      activeId: typeof parsed.activeId === "string" ? parsed.activeId : "",
       drafts: parsed.drafts && typeof parsed.drafts === "object" ? parsed.drafts as Record<string, string> : {},
       stdin: typeof parsed.stdin === "string" ? parsed.stdin : "",
       layout: {
@@ -232,7 +251,7 @@ export default function IDEPage() {
 
   const [projectName, setProjectName] = useState("Project");
   const [role, setRole] = useState<Role>("READER");
-  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const [nodes, setNodes] = useState<ProjectNode[]>([]);
 
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
   const [activeFileId, setActiveFileId] = useState<string>("");
@@ -266,12 +285,12 @@ export default function IDEPage() {
     hasHydratedProjectStateRef.current = false;
 
     try {
-      const [projectDetail, files] = await Promise.all([getProject(projectId), listFiles(projectId)]);
+      const [projectDetail, allNodes] = await Promise.all([getProject(projectId), listNodes(projectId)]);
       const persisted = loadPersistedIdeState(projectId);
 
       setProjectName(projectDetail.project.name);
       setRole(projectDetail.role);
-      setProjectFiles(files);
+      setNodes(allNodes);
 
       if (persisted) {
         setShowSidebar(persisted.layout.showSidebar);
@@ -280,28 +299,29 @@ export default function IDEPage() {
         setStdin(persisted.stdin ?? "");
       }
 
-      const filesByPath = new Map(files.map((file) => [file.path, file] as const));
-      const preferredPaths = persisted?.openPaths.filter((path) => filesByPath.has(path)) ?? [];
-      const initialPaths = preferredPaths.length > 0
-        ? preferredPaths
-        : files[0]
-          ? [files[0].path]
+      const fileNodes = allNodes.filter((n) => n.type === "file");
+      const filesById = new Map(fileNodes.map((node) => [node.id, node] as const));
+
+      const preferredIds = persisted?.openIds.filter((id) => filesById.has(id)) ?? [];
+      const initialIds = preferredIds.length > 0
+        ? preferredIds
+        : fileNodes[0]
+          ? [fileNodes[0].id]
           : [];
 
-      const restoredOpenFiles = initialPaths
-        .map((path) => filesByPath.get(path))
-        .filter((item): item is ProjectFile => !!item)
-        .map((file) => {
-          const backendMapped = mapProjectFileToOpenFile(file);
-          const draft = persisted?.drafts?.[file.path];
-
+      const restoredOpenFiles = initialIds
+        .map((id) => filesById.get(id))
+        .filter((item): item is ProjectNode => !!item)
+        .map((node) => {
+          const base = mapNodeToOpenFile(node);
+          const draft = persisted?.drafts?.[node.id];
           return {
-            ...backendMapped,
-            content: typeof draft === "string" ? draft : backendMapped.content,
+            ...base,
+            content: typeof draft === "string" ? draft : base.content,
           };
         });
 
-      const preferredActive = persisted?.activePath;
+      const preferredActive = persisted?.activeId;
       const hasPreferredActive = !!preferredActive && restoredOpenFiles.some((file) => file.id === preferredActive);
 
       setOpenFiles(restoredOpenFiles);
@@ -339,14 +359,14 @@ export default function IDEPage() {
 
     const drafts = openFiles.reduce<Record<string, string>>((accumulator, file) => {
       if (file.content !== file.savedContent) {
-        accumulator[file.path] = file.content;
+        accumulator[file.id] = file.content;
       }
       return accumulator;
     }, {});
 
     const state: PersistedIdeState = {
-      openPaths: openFiles.map((file) => file.path),
-      activePath: activeFileId,
+      openIds: openFiles.map((file) => file.id),
+      activeId: activeFileId,
       drafts,
       stdin,
       layout: {
@@ -363,23 +383,17 @@ export default function IDEPage() {
     setOpenFiles((prev) => prev.map((f) => (f.id === activeFileId ? { ...f, content: value } : f)));
   }, [activeFileId]);
 
-  const handleFileOpen = useCallback((file: { name: string; path: string; language?: string; content?: string }) => {
+  const handleFileOpen = useCallback((node: ProjectNode) => {
+    if (node.type !== "file") return;
+
     setOpenFiles((prev) => {
-      const existing = prev.find((item) => item.path === file.path);
+      const existing = prev.find((item) => item.id === node.id);
       if (existing) {
         setActiveFileId(existing.id);
         return prev;
       }
 
-      const nextFile: OpenFile = {
-        id: file.path,
-        name: file.name,
-        path: file.path,
-        language: file.language ?? getLanguageFromPath(file.path),
-        content: file.content ?? "",
-        savedContent: file.content ?? "",
-      };
-
+      const nextFile = mapNodeToOpenFile(node);
       setActiveFileId(nextFile.id);
       return [...prev, nextFile];
     });
@@ -424,14 +438,14 @@ export default function IDEPage() {
     setFileError("");
 
     try {
-      await saveFile(projectId, target.path, contentToSave);
+      await saveNode(projectId, target.id, contentToSave);
 
       setOpenFiles((prev) => prev.map((f) => (
         f.id === targetId ? { ...f, content: contentToSave, savedContent: contentToSave } : f
       )));
 
-      setProjectFiles((prev) => prev.map((file) => (
-        file.path === target.path ? { ...file, content: contentToSave, updatedAt: new Date().toISOString() } : file
+      setNodes((prev) => prev.map((node) => (
+        node.id === target.id ? { ...node, content: contentToSave, updatedAt: new Date().toISOString() } : node
       )));
 
       setSaveStatus("saved");
@@ -463,115 +477,75 @@ export default function IDEPage() {
     saveStatus,
   ]);
 
-  const handleCreateFile = useCallback(async (path: string) => {
+  const handleCreateNode = useCallback(async (input: { parentId: string | null; type: NodeType; name: string }) => {
     if (!projectId || readOnly) return;
-
-    const trimmedPath = path.trim().replace(/^\/+/, "");
-    if (!trimmedPath) {
-      setFileError("File path is required");
-      return;
-    }
-
-    if (projectFiles.some((file) => file.path === trimmedPath)) {
-      setFileError("File path already exists");
-      return;
-    }
 
     setFileBusy(true);
     setFileError("");
 
     try {
-      const created = await createFile(projectId, trimmedPath, "");
+      const created = await createNode(projectId, input);
+      setNodes((prev) => [...prev, created]);
 
-      const createdFile: ProjectFile = {
-        id: created.id,
-        path: created.path,
-        content: created.content,
-        updatedAt: new Date().toISOString(),
-      };
-
-      setProjectFiles((prev) => [...prev, createdFile]);
-
-      handleFileOpen({
-        name: created.path.split("/").pop() || created.path,
-        path: created.path,
-        language: getLanguageFromPath(created.path),
-        content: created.content,
-      });
+      if (created.type === "file") {
+        handleFileOpen(created);
+      }
     } catch (err) {
-      setFileError(err instanceof Error ? err.message : "Failed to create file");
+      setFileError(err instanceof Error ? err.message : "Failed to create");
     } finally {
       setFileBusy(false);
     }
-  }, [handleFileOpen, projectFiles, projectId, readOnly]);
+  }, [handleFileOpen, projectId, readOnly]);
 
-  const handleRenameFile = useCallback(async (oldPath: string, newPath: string) => {
+  const handleRenameNode = useCallback(async (nodeId: string, name: string) => {
     if (!projectId || readOnly) return;
-
-    const trimmedPath = newPath.trim().replace(/^\/+/, "");
-    if (!trimmedPath || trimmedPath === oldPath) return;
-
-    if (projectFiles.some((file) => file.path === trimmedPath && file.path !== oldPath)) {
-      setFileError("File path already exists");
-      return;
-    }
 
     setFileBusy(true);
     setFileError("");
 
     try {
-      await renameFile(projectId, oldPath, trimmedPath);
+      const updated = await renameNode(projectId, nodeId, name);
 
-      setProjectFiles((prev) => prev.map((file) => (
-        file.path === oldPath
-          ? { ...file, path: trimmedPath, updatedAt: new Date().toISOString() }
-          : file
+      setNodes((prev) => prev.map((node) => (
+        node.id === nodeId ? { ...node, name: updated.name, updatedAt: updated.updatedAt } : node
       )));
 
-      setOpenFiles((prev) => prev.map((f) => {
-        if (f.path !== oldPath) return f;
-
-        const name = trimmedPath.split("/").pop() || trimmedPath;
-        return {
-          ...f,
-          id: trimmedPath,
-          name,
-          path: trimmedPath,
-          language: getLanguageFromPath(trimmedPath),
-        };
-      }));
-
-      if (activeFileId === oldPath) {
-        setActiveFileId(trimmedPath);
-      }
+      // If the renamed node is an open file, update its tab label and language.
+      setOpenFiles((prev) => prev.map((f) => (
+        f.id === nodeId ? { ...f, name: updated.name, language: languageFromName(updated.name) } : f
+      )));
     } catch (err) {
-      setFileError(err instanceof Error ? err.message : "Failed to rename file");
+      setFileError(err instanceof Error ? err.message : "Failed to rename");
     } finally {
       setFileBusy(false);
     }
-  }, [activeFileId, projectFiles, projectId, readOnly]);
+  }, [projectId, readOnly]);
 
-  const handleDeleteFile = useCallback(async (path: string) => {
+  const handleDeleteNode = useCallback(async (nodeId: string) => {
     if (!projectId || readOnly) return;
 
     setFileBusy(true);
     setFileError("");
 
+    // Folders delete their whole subtree on the backend; mirror that locally.
+    const removedIds = collectLocalSubtreeIds(nodes, nodeId);
+
     try {
-      await deleteFile(projectId, path);
+      await deleteNode(projectId, nodeId);
 
-      setProjectFiles((prev) => prev.filter((file) => file.path !== path));
+      setNodes((prev) => prev.filter((node) => !removedIds.has(node.id)));
 
-      const target = openFiles.find((f) => f.path === path);
-      if (target) {
-        doCloseFile(target.id);
-      }
+      removedIds.forEach((id) => {
+        if (openFiles.some((f) => f.id === id)) {
+          doCloseFile(id);
+        }
+      });
     } catch (err) {
-      setFileError(err instanceof Error ? err.message : "Failed to delete file");
+      setFileError(err instanceof Error ? err.message : "Failed to delete");
     } finally {
       setFileBusy(false);
     }
-  }, [doCloseFile, openFiles, projectId, readOnly]);
+  }, [doCloseFile, nodes, openFiles, projectId, readOnly]);
 
   const handleRun = useCallback(async () => {
     if (!projectId || !activeFile || isRunning) return;
@@ -588,7 +562,7 @@ export default function IDEPage() {
       return;
     }
 
-    const executionLanguage = getExecutionLanguage(activeFile.path);
+    const executionLanguage = executionLanguageFromName(activeFile.name);
     if (!executionLanguage) {
       setExecutionResult({
         output: "",
@@ -609,7 +583,7 @@ export default function IDEPage() {
       const result = await executeProjectCode(projectId, {
         sourceCode: activeFile.content,
         language: executionLanguage,
-        filePath: activeFile.path,
+        filePath: activeFile.name,
         stdin: stdin || undefined,
       });
 
@@ -850,14 +824,14 @@ export default function IDEPage() {
         {showSidebar && (
           <div className="w-72 bg-[#252526] border-r border-[#3e3e42] flex flex-col flex-shrink-0">
             <FileExplorer
-              files={projectFiles}
-              activePath={activeFile?.path}
+              nodes={nodes}
+              activeNodeId={activeFile?.id}
               readOnly={readOnly}
               busy={fileBusy || loading}
               onFileOpen={handleFileOpen}
-              onCreateFile={handleCreateFile}
-              onRenameFile={handleRenameFile}
-              onDeleteFile={handleDeleteFile}
+              onCreateNode={handleCreateNode}
+              onRenameNode={handleRenameNode}
+              onDeleteNode={handleDeleteNode}
             />
           </div>
         )}

@@ -4,7 +4,7 @@ import { authJwt } from "../middleware/authJwt";
 import { requireProjectRole } from "../middleware/requireProjectRole";
 import { Project } from "../db/models/Project";
 import { ProjectAccess } from "../db/models/ProjectAccess";
-import { FileModel } from "../db/models/File";
+import { NodeModel } from "../db/models/Node";
 import { Notification } from "../db/models/Notification";
 import { requireProjectReadAccess } from "../middleware/requireProjectReadAccess";
 import mongoose from "mongoose";
@@ -201,7 +201,7 @@ projectRouter.delete(
     await Project.deleteOne({ _id: projectId });
     await Promise.all([
       ProjectAccess.deleteMany({ projectId }),
-      FileModel.deleteMany({ projectId }),
+      NodeModel.deleteMany({ projectId }),
       Notification.deleteMany({ projectId }),
     ]);
 

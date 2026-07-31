@@ -1,10 +1,11 @@
 import { useRef, useEffect } from "react";
 import { X } from "lucide-react";
 
+
 export interface EditorFile {
   id: string;
   name: string;
-  path: string;
+  path?: string;
   unsaved?: boolean;
 }
 
