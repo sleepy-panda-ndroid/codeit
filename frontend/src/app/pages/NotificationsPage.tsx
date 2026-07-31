@@ -20,7 +20,7 @@ import {
   declineProjectInvite,
   listNotifications,
   type NotificationItem,
-} from "../../lib/notifications";
+} from "../../lib/notification";
 
 export default function NotificationsPage() {
   const navigate = useNavigate();
