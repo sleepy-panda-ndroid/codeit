@@ -5,7 +5,7 @@ import { requireProjectRole } from "../middleware/requireProjectRole";
 import { Project } from "../db/models/Project";
 import { ProjectAccess } from "../db/models/ProjectAccess";
 import { FileModel } from "../db/models/File";
-
+import { Notification } from "../db/models/Notification";
 export const projectRouter = Router();
 
 const createSchema = z.object({
@@ -140,11 +140,11 @@ projectRouter.delete(
     const projectId = req.params.id;
 
     await Project.deleteOne({ _id: projectId });
-    await ProjectAccess.deleteMany({ projectId });
-    await FileModel.deleteMany({ projectId });
-
-    // later:
-    // await Notification.deleteMany({ projectId });
+    await Promise.all([
+      ProjectAccess.deleteMany({ projectId }),
+      FileModel.deleteMany({ projectId }),
+      Notification.deleteMany({ projectId }),
+    ]);
 
     res.json({ ok: true });
   }
