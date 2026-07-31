@@ -31,7 +31,7 @@ export default function NotificationsPage() {
   const [actingId, setActingId] = useState<string | null>(null);
 
   const inviteCount = useMemo(
-    () => items.filter((item) => item.type === "PROJECT_INVITE").length,
+    () => items.filter((item) => item.status === "PENDING").length,
     [items]
   );
 
@@ -59,7 +59,6 @@ export default function NotificationsPage() {
 
     try {
       const result = await acceptProjectInvite(item.accessId);
-      setItems((prev) => prev.filter((n) => n.id !== item.id));
       navigate(`/app/ide/${result.projectId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to accept invitation");
@@ -74,7 +73,13 @@ export default function NotificationsPage() {
 
     try {
       await declineProjectInvite(item.accessId);
-      setItems((prev) => prev.filter((n) => n.id !== item.id));
+      setItems((prev) =>
+        prev.map((n) =>
+          n.id === item.id
+            ? { ...n, status: "DECLINED", resolvedAt: new Date().toISOString() }
+            : n
+        )
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to decline invitation");
     } finally {
@@ -148,18 +153,21 @@ export default function NotificationsPage() {
             </div>
             <h2 className="text-xl font-semibold text-white mb-2">All caught up</h2>
             <p className="text-gray-400">
-              You do not have any active notifications right now.
+              You do not have any notifications right now.
             </p>
           </Card>
         ) : (
           <div className="space-y-4">
             {items.map((item) => {
               const busy = actingId === item.id;
+              const pending = item.status === "PENDING";
 
               return (
                 <Card
                   key={item.id}
-                  className="bg-[#252526] border-[#3e3e42] p-6 hover:border-indigo-500/40 transition-colors"
+                  className={`bg-[#252526] border-[#3e3e42] p-6 transition-colors ${
+                    pending ? "hover:border-indigo-500/40" : "opacity-80"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div className="flex items-start gap-4 min-w-0 flex-1">
@@ -175,6 +183,18 @@ export default function NotificationsPage() {
                             <Users className="w-3.5 h-3.5" />
                             Project Invite
                           </span>
+
+                          {item.status !== "PENDING" && (
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border ${
+                                item.status === "ACCEPTED"
+                                  ? "border-green-600/30 bg-green-600/10 text-green-300"
+                                  : "border-gray-600/30 bg-gray-600/10 text-gray-300"
+                              }`}
+                            >
+                              {item.status === "ACCEPTED" ? "Accepted" : "Declined"}
+                            </span>
+                          )}
 
                           <span className="inline-flex items-center gap-2 text-xs text-gray-400">
                             <Clock3 className="w-3.5 h-3.5" />
@@ -223,38 +243,46 @@ export default function NotificationsPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        variant="ghost"
-                        className="text-gray-300 hover:text-white hover:bg-white/10"
-                        onClick={() => void handleDecline(item)}
-                        disabled={busy}
-                      >
-                        {busy ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <>
-                            <X className="w-4 h-4 mr-2" />
-                            Decline
-                          </>
-                        )}
-                      </Button>
+                    {pending ? (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          variant="ghost"
+                          className="text-gray-300 hover:text-white hover:bg-white/10"
+                          onClick={() => void handleDecline(item)}
+                          disabled={busy}
+                        >
+                          {busy ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              <X className="w-4 h-4 mr-2" />
+                              Decline
+                            </>
+                          )}
+                        </Button>
 
-                      <Button
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                        onClick={() => void handleAccept(item)}
-                        disabled={busy}
-                      >
-                        {busy ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Check className="w-4 h-4 mr-2" />
-                            Accept
-                          </>
-                        )}
-                      </Button>
-                    </div>
+                        <Button
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                          onClick={() => void handleAccept(item)}
+                          disabled={busy}
+                        >
+                          {busy ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Check className="w-4 h-4 mr-2" />
+                              Accept
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="shrink-0 self-center text-sm text-gray-500">
+                        {item.status === "ACCEPTED"
+                          ? "Invitation accepted"
+                          : "Invitation declined"}
+                      </div>
+                    )}
                   </div>
                 </Card>
               );

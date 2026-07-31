@@ -124,3 +124,7 @@ export type PublicProject = {
 export async function listPublicProjects() {
   return apiFetch<PublicProject[]>("/projects/public");
 }
+
+export async function searchProjects(q: string) {
+  return apiFetch<Project[]>(`/projects/search?q=${encodeURIComponent(q)}`);
+}

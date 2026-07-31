@@ -1,22 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { Plus, FolderGit2, Clock, Users, X, FolderPlus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import ProjectCard from "../components/ProjectCard";
-import { createProject, listOwnedProjects, listSharedProjects, type Project } from "../../lib/projects";
+import { createProject, listOwnedProjects, listSharedProjects, searchProjects, type Project } from "../../lib/projects";
 import { getStoredUser } from "../../lib/auth";
 import CreateProjectModal from "../components/CreateProjectModal";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const query = (searchParams.get("q") ?? "").trim();
+
   const [ownedProjects, setOwnedProjects] = useState<Project[]>([]);
   const [sharedProjects, setSharedProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  const [searchResults, setSearchResults] = useState<Project[]>([]);
+  const [searching, setSearching] = useState(false);
 
   const user = getStoredUser();
 
@@ -38,6 +44,23 @@ export default function Dashboard() {
     refresh();
   }, []);
 
+  // Global search: owned + shared + public, fetched from the backend (debounced).
+  useEffect(() => {
+    if (!query) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const handle = window.setTimeout(() => {
+      searchProjects(query)
+        .then(setSearchResults)
+        .catch(() => setSearchResults([]))
+        .finally(() => setSearching(false));
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [query]);
+
   const allProjects = useMemo(() => {
     const merged = [...ownedProjects, ...sharedProjects];
     return merged.sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
@@ -49,12 +72,16 @@ export default function Dashboard() {
     return allProjects;
   }, [location.pathname, ownedProjects, sharedProjects, allProjects]);
 
-  
-  const sectionTitle = location.pathname === "/app/projects"
-    ? "My Projects"
-    : location.pathname === "/app/shared"
-      ? "Shared Projects"
-      : "Recent Projects";
+  // With a query, show global search results; otherwise the route's normal list.
+  const projectsToShow = query ? searchResults : displayedProjects;
+
+  const sectionTitle = query
+    ? `Search results for "${query}"`
+    : location.pathname === "/app/projects"
+      ? "My Projects"
+      : location.pathname === "/app/shared"
+        ? "Shared Projects"
+        : "Recent Projects";
 
   const handleCreateProject = () => {
     setIsCreateModalOpen(true);
@@ -133,7 +160,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Recent Projects Section */}
+      {/* Projects Section */}
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-white">{sectionTitle}</h2>
         <Button className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={handleCreateProject} disabled={creating}>
@@ -143,19 +170,26 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {!loading && displayedProjects.length === 0 && (
-          <Card className="bg-white/5 border-white/10 p-6 text-gray-300">
-            No projects yet. Create one or Contact your team lead.
+        {searching && (
+          <Card className="bg-white/5 border-white/10 p-6 text-gray-300 md:col-span-2 lg:col-span-3">
+            Searching…
           </Card>
         )}
-        {displayedProjects.map((project) => (
-        <ProjectCard
-          key={project._id}
-          project={project}
-          onProjectUpdated={refresh}
-          onProjectDeleted={refresh}
-        />
-      ))}
+        {!loading && !searching && projectsToShow.length === 0 && (
+          <Card className="bg-white/5 border-white/10 p-6 text-gray-300 md:col-span-2 lg:col-span-3">
+            {query
+              ? `No projects match "${query}".`
+              : "No projects yet. Create one or Contact your team lead."}
+          </Card>
+        )}
+        {projectsToShow.map((project) => (
+          <ProjectCard
+            key={project._id}
+            project={project}
+            onProjectUpdated={refresh}
+            onProjectDeleted={refresh}
+          />
+        ))}
       </div>
 
       <CreateProjectModal

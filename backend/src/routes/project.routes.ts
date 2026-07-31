@@ -115,6 +115,43 @@ projectRouter.get("/shared", authJwt, async (req: any, res) => {
   );
 });
 
+// Search owned + shared + public projects by name
+projectRouter.get("/search", authJwt, async (req: any, res) => {
+  const q = String(req.query.q ?? "").trim();
+  if (!q) return res.json([]);
+
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const nameFilter = { name: { $regex: escaped, $options: "i" } };
+
+  // the roles this user holds, per project
+  const accessRows = await ProjectAccess.find({
+    userId: req.userId,
+    status: "ACCEPTED",
+  })
+    .select("projectId role")
+    .lean();
+
+  const roleByProject = new Map(accessRows.map((r: any) => [String(r.projectId), r.role]));
+  const accessibleIds = accessRows.map((r: any) => r.projectId);
+
+  // name match, limited to what they can access OR anything public
+  const projects = await Project.find({
+    ...nameFilter,
+    $or: [{ _id: { $in: accessibleIds } }, { visibility: "PUBLIC" }],
+  })
+    .sort({ updatedAt: -1 })
+    .limit(50)
+    .lean();
+
+  res.json(
+    projects.map((p: any) => ({
+      ...p,
+      // members get their real role; public non-members are read-only
+      role: roleByProject.get(String(p._id)) ?? "READER",
+    }))
+  );
+});
+
 // Browse public projects (discovery)
 projectRouter.get("/public", authJwt, async (req: any, res) => {
   const projects = await Project.find({ visibility: "PUBLIC" })

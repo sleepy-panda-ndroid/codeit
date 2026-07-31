@@ -47,6 +47,8 @@ notificationRouter.get("/notifications", authJwt, async (req: any, res) => {
         email: actor?.email ?? "",
       },
       createdAt: row.createdAt,
+      status: row.status ?? "PENDING",
+      resolvedAt: row.resolvedAt ?? null,
     };
   });
 
@@ -55,7 +57,10 @@ notificationRouter.get("/notifications", authJwt, async (req: any, res) => {
 
 // Optional small helper for bell badge
 notificationRouter.get("/notifications/count", authJwt, async (req: any, res) => {
-  const count = await Notification.countDocuments({ userId: req.userId });
+  const count = await Notification.countDocuments({
+    userId: req.userId,
+    status: "PENDING",
+  });
   return res.json({ count });
 });
 

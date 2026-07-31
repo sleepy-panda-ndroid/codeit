@@ -109,6 +109,18 @@ shareRouter.post(
       }
     );
 
+
+    // keep only the 50 most recent notifications for this user
+    const stale = await Notification.find({ userId: targetUser._id })
+      .sort({ createdAt: -1 })
+      .skip(50)
+      .select("_id")
+      .lean();
+
+    if (stale.length) {
+      await Notification.deleteMany({ _id: { $in: stale.map((s) => s._id) } });
+    }
+
     return res.json({
       ok: true,
       invitation: "PENDING",
@@ -242,11 +254,10 @@ shareRouter.post(
     access.status = "ACCEPTED";
     await access.save();
 
-    await Notification.deleteOne({
-      accessId: access._id,
-      userId: req.userId,
-      type: "PROJECT_INVITE",
-    });
+    await Notification.updateOne(
+      { accessId: access._id, userId: req.userId, type: "PROJECT_INVITE" },
+      { $set: { status: "ACCEPTED", resolvedAt: new Date() } }
+    );
 
     return res.json({
       ok: true,
@@ -278,11 +289,10 @@ shareRouter.post(
       return res.status(404).json({ error: "Pending invite not found" });
     }
 
-    await Notification.deleteOne({
-      accessId: access._id,
-      userId: req.userId,
-      type: "PROJECT_INVITE",
-    });
+    await Notification.updateOne(
+      { accessId: access._id, userId: req.userId, type: "PROJECT_INVITE" },
+      { $set: { status: "DECLINED", resolvedAt: new Date() } }
+    );
 
     await ProjectAccess.deleteOne({
       _id: access._id,
