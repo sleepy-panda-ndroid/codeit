@@ -7,7 +7,6 @@ export type AuthUser = {
   email: string;
   bio?: string;
   avatarDataUrl?: string;
-  twoFactorEnabled?: boolean;
   preferences?: UserPreferences;
 };
 
@@ -86,12 +85,5 @@ export async function updatePreferences(input: UserPreferences) {
   return apiFetch<{ preferences: UserPreferences }>("/auth/preferences", {
     method: "PUT",
     body: JSON.stringify(input),
-  });
-}
-
-export async function updateTwoFactor(enabled: boolean) {
-  return apiFetch<{ twoFactorEnabled: boolean }>("/auth/2fa", {
-    method: "PUT",
-    body: JSON.stringify({ enabled }),
   });
 }

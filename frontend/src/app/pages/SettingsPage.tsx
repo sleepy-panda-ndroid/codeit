@@ -25,7 +25,6 @@ import {
   updatePassword,
   updatePreferences,
   updateProfile,
-  updateTwoFactor,
 } from "../../lib/auth";
 import {
   DEFAULT_PREFERENCES,
@@ -61,9 +60,6 @@ export default function SettingsPage() {
   const [collaborationUpdates, setCollaborationUpdates] = useState(DEFAULT_PREFERENCES.collaborationUpdates);
   const [errorAlerts, setErrorAlerts] = useState(DEFAULT_PREFERENCES.errorAlerts);
   const [originalPreferences, setOriginalPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
-
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-  const [originalTwoFactorEnabled, setOriginalTwoFactorEnabled] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -106,9 +102,6 @@ export default function SettingsPage() {
       setBio(nextProfile.bio);
       setAvatarDataUrl(nextProfile.avatarDataUrl);
       setOriginalProfile(nextProfile);
-      const nextTwoFactor = Boolean(storedUser.twoFactorEnabled);
-      setTwoFactorEnabled(nextTwoFactor);
-      setOriginalTwoFactorEnabled(nextTwoFactor);
     }
 
     if (!token) {
@@ -145,9 +138,6 @@ export default function SettingsPage() {
         setErrorAlerts(serverPreferences.errorAlerts);
         setOriginalPreferences(serverPreferences);
 
-        const nextTwoFactor = Boolean(me.twoFactorEnabled);
-        setTwoFactorEnabled(nextTwoFactor);
-        setOriginalTwoFactorEnabled(nextTwoFactor);
 
         setStoredUserPreferences(serverPreferences);
         setAuthSession(token, {
@@ -214,7 +204,6 @@ export default function SettingsPage() {
       const preferencesToSave = buildPreferences();
       const preferencesResponse = await updatePreferences(preferencesToSave);
       const mergedPreferences = mergeUserPreferences(preferencesResponse.preferences);
-      await updateTwoFactor(twoFactorEnabled);
 
       setStoredUserPreferences(mergedPreferences);
 
@@ -231,12 +220,10 @@ export default function SettingsPage() {
       setAvatarDataUrl(nextProfile.avatarDataUrl);
       setOriginalProfile(nextProfile);
       setOriginalPreferences(mergedPreferences);
-      setOriginalTwoFactorEnabled(twoFactorEnabled);
 
       setAuthSession(token, {
         ...updatedProfile,
         preferences: mergedPreferences,
-        twoFactorEnabled,
       });
 
       setSaveSuccess("Settings saved successfully.");
@@ -264,7 +251,6 @@ export default function SettingsPage() {
     setCollaborationUpdates(originalPreferences.collaborationUpdates);
     setErrorAlerts(originalPreferences.errorAlerts);
 
-    setTwoFactorEnabled(originalTwoFactorEnabled);
     setSaveError("");
     setSaveSuccess("");
     setPasswordError("");
@@ -670,14 +656,6 @@ export default function SettingsPage() {
               </div>
 
               <div className="mt-8 pt-6 border-t border-[#3e3e42]">
-                <h3 className="font-semibold text-white mb-4">Two-Factor Authentication</h3>
-                <div className="flex items-center justify-between p-4 bg-[#1e1e1e] rounded-lg border border-[#3e3e42]">
-                  <div>
-                    <p className="font-medium text-white">Enable 2FA</p>
-                    <p className="text-sm text-gray-400">Add an extra layer of security to your account</p>
-                  </div>
-                  <Switch checked={twoFactorEnabled} onCheckedChange={setTwoFactorEnabled} />
-                </div>
                 <p className="text-xs text-gray-500 mt-3">Use Save Changes to persist this setting to your account.</p>
               </div>
 
