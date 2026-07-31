@@ -37,12 +37,13 @@ shareRouter.post(
     }
 
     const email =
-      validator.normalizeEmail(parsed.data.email) ?? parsed.data.email.toLowerCase();
+      validator.normalizeEmail(parsed.data.email) ??
+      parsed.data.email.toLowerCase();
     const role = parsed.data.role;
 
     const [targetUser, project] = await Promise.all([
       User.findOne({ email }).select("_id name email"),
-      Project.findById(projectId).select("_id name ownerId"),
+      Project.findById(projectId).select("_id name"),
     ]);
 
     if (!targetUser) {
@@ -51,10 +52,6 @@ shareRouter.post(
 
     if (!project) {
       return res.status(404).json({ error: "Project not found" });
-    }
-
-    if (String(targetUser._id) === String(project.ownerId)) {
-      return res.status(400).json({ error: "Owner already has access" });
     }
 
     const existing = await ProjectAccess.findOne({
@@ -67,7 +64,9 @@ shareRouter.post(
     }
 
     if (existing?.status === "ACCEPTED") {
-      return res.status(400).json({ error: "User is already a collaborator" });
+      return res
+        .status(400)
+        .json({ error: "User is already a collaborator" });
     }
 
     const access = await ProjectAccess.findOneAndUpdate(

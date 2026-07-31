@@ -28,7 +28,6 @@ projectRouter.post("/", authJwt, async (req: any, res) => {
   const project = await Project.create({
     name: parsed.data.name,
     description: parsed.data.description,
-    ownerId: req.userId,
   });
 
   await ProjectAccess.create({
@@ -68,14 +67,16 @@ projectRouter.get("/", authJwt, async (req: any, res) => {
 
 // List owned projects
 projectRouter.get("/owned", authJwt, async (req: any, res) => {
-  const projects = await Project.find({ ownerId: req.userId }).lean();
+  const rows = await ProjectAccess.find({
+    userId: req.userId,
+    role: "OWNER",
+    status: "ACCEPTED",
+  }).select("projectId").lean();
 
-  res.json(
-    projects.map((p: any) => ({
-      ...p,
-      role: "OWNER",
-    }))
-  );
+  const projectIds = rows.map((r) => r.projectId);
+  const projects = await Project.find({ _id: { $in: projectIds } }).lean();
+
+  res.json(projects.map((p: any) => ({ ...p, role: "OWNER" })));
 });
 
 // List shared projects
