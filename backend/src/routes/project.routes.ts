@@ -7,8 +7,9 @@ import { ProjectAccess } from "../db/models/ProjectAccess";
 import { FileModel } from "../db/models/File";
 import { Notification } from "../db/models/Notification";
 import { requireProjectReadAccess } from "../middleware/requireProjectReadAccess";
-export const projectRouter = Router();
+import mongoose from "mongoose";
 
+export const projectRouter = Router();
 const createSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(2000).optional(),
@@ -20,25 +21,31 @@ const patchSchema = z.object({
 });
 
 // Create project
+
 projectRouter.post("/", authJwt, async (req: any, res) => {
   const parsed = createSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid input" });
+  if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
+
+  const session = await mongoose.startSession();
+  try {
+    let project;
+    await session.withTransaction(async () => {
+      const [created] = await Project.create(
+        [{ name: parsed.data.name, description: parsed.data.description }],
+        { session }
+      );
+      await ProjectAccess.create(
+        [{ projectId: created._id, userId: req.userId, role: "OWNER", status: "ACCEPTED" }],
+        { session }
+      );
+      project = created;
+    });
+    res.status(201).json(project);
+  } catch {
+    res.status(500).json({ error: "Failed to create project" });
+  } finally {
+    session.endSession();
   }
-
-  const project = await Project.create({
-    name: parsed.data.name,
-    description: parsed.data.description,
-  });
-
-  await ProjectAccess.create({
-    projectId: project._id,
-    userId: req.userId,
-    role: "OWNER",
-    status: "ACCEPTED",
-  });
-
-  res.status(201).json(project);
 });
 
 // List all accessible projects
