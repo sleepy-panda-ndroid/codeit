@@ -5,7 +5,7 @@ import { authJwt } from "../middleware/authJwt";
 import { requireProjectRole } from "../middleware/requireProjectRole";
 import { FileModel } from "../db/models/File";
 import { requireProjectReadAccess } from "../middleware/requireProjectReadAccess";
-
+import { normalizeFilePath } from "../utils/filePath";
 export const fileRouter = Router({ mergeParams: true });
 
 // Validate :id project id
@@ -45,17 +45,35 @@ fileRouter.post(
   requireProjectRole(["OWNER", "WRITER"]),
   async (req: any, res) => {
     const parsed = createSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid input" });
+    }
 
     const projectId = req.params.id;
-    const { path, content } = parsed.data;
+
+    const clean = normalizeFilePath(parsed.data.path);
+    if (!clean) {
+      return res.status(400).json({ error: "Invalid file path" });
+    }
+
+    const { content } = parsed.data;
 
     try {
-      const created = await FileModel.create({ projectId, path, content });
-      res.status(201).json({ id: String(created._id), path: created.path, content: created.content });
+      const created = await FileModel.create({
+        projectId,
+        path: clean,
+        content,
+      });
+
+      res.status(201).json({
+        id: String(created._id),
+        path: created.path,
+        content: created.content,
+      });
     } catch (e: any) {
-      // duplicate path
-      if (e?.code === 11000) return res.status(409).json({ error: "File path already exists" });
+      if (e?.code === 11000) {
+        return res.status(409).json({ error: "File path already exists" });
+      }
       throw e;
     }
   }
@@ -101,11 +119,17 @@ fileRouter.patch(
   requireProjectRole(["OWNER", "WRITER"]),
   async (req: any, res) => {
     const parsed = renameSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid input" });
+    }
 
     const projectId = req.params.id;
     const path = decodeURIComponent(req.params.path);
-    const newPath = parsed.data.newPath;
+
+    const newPath = normalizeFilePath(parsed.data.newPath);
+    if (!newPath) {
+      return res.status(400).json({ error: "Invalid file path" });
+    }
 
     if (path === newPath) {
       return res.json({ ok: true, path: newPath });
@@ -118,11 +142,20 @@ fileRouter.patch(
         { new: true }
       );
 
-      if (!updated) return res.status(404).json({ error: "File not found" });
+      if (!updated) {
+        return res.status(404).json({ error: "File not found" });
+      }
 
-      return res.json({ ok: true, path: updated.path, updatedAt: updated.updatedAt });
+      return res.json({
+        ok: true,
+        path: updated.path,
+        updatedAt: updated.updatedAt,
+      });
     } catch (e: any) {
-      if (e?.code === 11000) return res.status(409).json({ error: "File path already exists" });
+      if (e?.code === 11000) {
+        return res.status(409).json({ error: "File path already exists" });
+      }
+
       throw e;
     }
   }
