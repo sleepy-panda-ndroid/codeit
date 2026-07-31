@@ -6,6 +6,7 @@ import { Project } from "../db/models/Project";
 import { ProjectAccess } from "../db/models/ProjectAccess";
 import { FileModel } from "../db/models/File";
 import { Notification } from "../db/models/Notification";
+import { requireProjectReadAccess } from "../middleware/requireProjectReadAccess";
 export const projectRouter = Router();
 
 const createSchema = z.object({
@@ -155,7 +156,7 @@ projectRouter.delete(
 projectRouter.get(
   "/:id",
   authJwt,
-  requireProjectRole(["OWNER", "WRITER", "READER"]),
+  requireProjectReadAccess(),
   async (req: any, res) => {
     const project = await Project.findById(req.params.id);
     if (!project) {

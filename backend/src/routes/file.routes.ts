@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import { authJwt } from "../middleware/authJwt";
 import { requireProjectRole } from "../middleware/requireProjectRole";
 import { FileModel } from "../db/models/File";
+import { requireProjectReadAccess } from "../middleware/requireProjectReadAccess";
 
 export const fileRouter = Router({ mergeParams: true });
 
@@ -19,7 +20,7 @@ fileRouter.use("/projects/:id/files", (req, res, next) => {
 fileRouter.get(
   "/projects/:id/files",
   authJwt,
-  requireProjectRole(["OWNER", "WRITER", "READER"]),
+  requireProjectReadAccess(),
   async (req: any, res) => {
     const projectId = req.params.id;
     const files = await FileModel.find({ projectId }).select("path content updatedAt");
