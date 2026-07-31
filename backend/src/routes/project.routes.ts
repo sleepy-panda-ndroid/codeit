@@ -115,6 +115,56 @@ projectRouter.get("/shared", authJwt, async (req: any, res) => {
   );
 });
 
+// Browse public projects (discovery)
+projectRouter.get("/public", authJwt, async (req: any, res) => {
+  const projects = await Project.find({ visibility: "PUBLIC" })
+    .sort({ updatedAt: -1 })
+    .limit(50)
+    .lean();
+
+  const projectIds = projects.map((p) => p._id);
+
+  // owner comes from the OWNER access row (ownerId no longer exists)
+  const ownerRows = await ProjectAccess.find({
+    projectId: { $in: projectIds },
+    role: "OWNER",
+  })
+    .populate("userId", "_id name")   // name only — no email on a public list
+    .lean();
+
+  const ownerMap = new Map(
+    ownerRows.map((r: any) => [String(r.projectId), r.userId])
+  );
+
+  // does the caller already have access? lets the UI show "Open" vs "View"
+  const myAccess = await ProjectAccess.find({
+    userId: req.userId,
+    projectId: { $in: projectIds },
+    status: "ACCEPTED",
+  })
+    .select("projectId role")
+    .lean();
+
+  const myRoleMap = new Map(
+    myAccess.map((r: any) => [String(r.projectId), r.role])
+  );
+
+  res.json(
+    projects.map((p: any) => {
+      const owner = ownerMap.get(String(p._id));
+      return {
+        _id: String(p._id),
+        name: p.name,
+        description: p.description ?? "",
+        visibility: p.visibility,
+        updatedAt: p.updatedAt,
+        owner: owner ? { id: String(owner._id), name: owner.name } : null,
+        myRole: myRoleMap.get(String(p._id)) ?? null,
+      };
+    })
+  );
+});
+
 // Update project (owner only)
 projectRouter.patch(
   "/:id",
