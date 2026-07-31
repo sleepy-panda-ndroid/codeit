@@ -13,7 +13,12 @@ import { notificationRouter } from "./routes/notification.routes";
 dotenv.config();
 const app = express();
 
-app.use(cors({ origin: true, credentials: true }));
+const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173")
+  .split(",")
+  .map((o) => o.trim());
+
+app.use(cors({ origin: allowedOrigins }));
+
 app.use(express.json({ limit: "5mb" }));
 
 app.use("/auth", authRouter);
@@ -43,9 +48,7 @@ app.use((err: any, _req: any, res: any, next: any) => {
     return next(err);
   }
 
-  return res.status(500).json({
-    error: err instanceof Error ? err.message : "Internal server error",
-  });
+  return res.status(500).json({ error: "Internal server error" });
 });
 
 async function main() {
