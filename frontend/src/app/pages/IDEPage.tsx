@@ -13,14 +13,17 @@ import {
   AlertCircle,
   Settings,
 } from "lucide-react";
+
 import { Button } from "../components/ui/button";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import FileExplorer from "../components/FileExplorer";
 import CodeEditor from "../components/CodeEditor";
 import TerminalPanel, { ExecutionResult } from "../components/TerminalPanel";
 import AIChatPanel from "../components/AIChatPanel";
+
 import EditorDashboard, { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from "../components/EditorDashboard";
 import EditorTabs from "../components/EditorTabs";
+
 import {
   createFile,
   deleteFile,
@@ -29,6 +32,7 @@ import {
   saveFile,
   type ProjectFile,
 } from "../../lib/files";
+
 import { executeProjectCode, type ExecutionLanguage } from "../../lib/execution";
 import { getProject } from "../../lib/projects";
 
@@ -55,33 +59,8 @@ interface PersistedIdeState {
 
 type SaveStatus = "saved" | "saving" | "unsaved";
 type Role = "OWNER" | "WRITER" | "READER";
-type KeybindingPreset = EditorSettings["keybinding"];
 
 const EDITOR_SETTINGS_STORAGE_KEY = "codeit:editor-dashboard-settings";
-
-const KEYBINDING_PREVIEWS: Record<KeybindingPreset, Array<[string, string]>> = {
-  default: [
-    ["Ctrl+S", "Save"],
-    ["Ctrl+Enter", "Run"],
-    ["Ctrl+B", "Toggle Sidebar"],
-    ["Ctrl+J", "Toggle Terminal"],
-    ["Ctrl+,", "Editor Settings"],
-  ],
-  vim: [
-    [":w", "Save file"],
-    [":q", "Quit editor"],
-    [":wq", "Save and quit"],
-    ["dd", "Delete line"],
-    ["gg / G", "Top / bottom"],
-  ],
-  emacs: [
-    ["Ctrl+X Ctrl+S", "Save"],
-    ["Ctrl+X K", "Close buffer"],
-    ["Ctrl+A / Ctrl+E", "Line start / end"],
-    ["Alt+W", "Copy region"],
-    ["Ctrl+Y", "Paste"],
-  ],
-};
 
 function loadEditorDashboardSettings(): EditorSettings {
   if (typeof window === "undefined") {
@@ -96,7 +75,6 @@ function loadEditorDashboardSettings(): EditorSettings {
 
     const parsed = JSON.parse(raw) as Partial<EditorSettings> & {
       autoSaveEnabled?: boolean;
-      keybindings?: EditorSettings["keybinding"];
       renderWhitespace?: EditorSettings["renderWhitespace"] | boolean;
     };
 
@@ -108,8 +86,6 @@ function loadEditorDashboardSettings(): EditorSettings {
           : typeof parsed.autoSaveEnabled === "boolean"
           ? parsed.autoSaveEnabled
           : DEFAULT_EDITOR_SETTINGS.autoSave,
-      keybinding:
-        parsed.keybinding ?? parsed.keybindings ?? DEFAULT_EDITOR_SETTINGS.keybinding,
     };
 
     if (typeof parsed.renderWhitespace === "boolean") {
@@ -961,15 +937,6 @@ export default function IDEPage() {
             <AIChatPanel onClose={() => setShowAIPanel(false)} />
           </div>
         )}
-      </div>
-
-      <div className="h-6 bg-indigo-900/30 border-t border-[#3e3e42] flex items-center px-3 gap-4 flex-shrink-0">
-        {KEYBINDING_PREVIEWS[editorSettings.keybinding].map(([key, label]) => (
-          <span key={key} className="flex items-center gap-1 text-xs text-gray-500">
-            <kbd className="px-1 py-0 bg-[#3e3e42] rounded text-gray-400 text-[10px]">{key}</kbd>
-            {label}
-          </span>
-        ))}
       </div>
     </div>
   );

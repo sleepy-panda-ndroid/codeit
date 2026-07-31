@@ -53,3 +53,12 @@ Replaced editor with Monaco Editor
 Cleaned terminal panel
 removed fake logs
 replaced with placeholder message
+
+backend:
+cd backend
+npm install
+npm run dev
+frontend:
+cd frontend
+npm install
+npm run dev

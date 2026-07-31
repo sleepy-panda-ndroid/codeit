@@ -11,77 +11,77 @@ import {
   Check,
 } from "lucide-react";
 
+export type EditorTheme =
+  | "light"
+  | "dark"
+  | "hcBlack"
+  | "hcLight";
+
 export interface EditorSettings {
   fontSize: number;
-  fontFamily: string;
   tabSize: number;
-  indentStyle: "spaces" | "tabs";
   wordWrap: boolean;
   lineNumbers: boolean;
   cursorStyle: "line" | "block" | "underline";
   lineHeight: number;
   renderWhitespace: "none" | "boundary" | "all";
-  theme: string;
+  theme: EditorTheme;
   minimap: boolean;
+  minimapScale: 1 | 2 | 3 | 4 | 5;
   bracketColorization: boolean;
   scrollBeyondLastLine: boolean;
   highlightActiveLine: boolean;
   autoSave: boolean;
   autoSaveDelay: number;
   formatOnSave: boolean;
-  keybinding: "default" | "vim" | "emacs";
 }
 
 export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   fontSize: 14,
-  fontFamily: "JetBrains Mono",
   tabSize: 2,
-  indentStyle: "spaces",
   wordWrap: false,
   lineNumbers: true,
   cursorStyle: "line",
   lineHeight: 1.6,
   renderWhitespace: "none",
-  theme: "vsDark",
-  minimap: false,
+  theme: "dark",
+  minimap: true,
+  minimapScale : 2,
   bracketColorization: true,
   scrollBeyondLastLine: false,
   highlightActiveLine: true,
   autoSave: false,
   autoSaveDelay: 1000,
   formatOnSave: false,
-  keybinding: "default",
 };
 
-export const EDITOR_THEMES: Record<string, { label: string; bg: string; text: string; gutter: string; border: string; accent: string }> = {
-  vsDark:       { label: "VS Dark (Default)",   bg: "#1e1e1e", text: "#d4d4d4", gutter: "#252526", border: "#3e3e42", accent: "#569cd6" },
-  monokai:      { label: "Monokai",             bg: "#272822", text: "#f8f8f2", gutter: "#2d2e27", border: "#49483e", accent: "#f92672" },
-  dracula:      { label: "Dracula",             bg: "#282a36", text: "#f8f8f2", gutter: "#21222c", border: "#44475a", accent: "#bd93f9" },
-  oneDarkPro:   { label: "One Dark Pro",        bg: "#282c34", text: "#abb2bf", gutter: "#21252b", border: "#3e4451", accent: "#61afef" },
-  githubDark:   { label: "GitHub Dark",         bg: "#0d1117", text: "#c9d1d9", gutter: "#161b22", border: "#30363d", accent: "#58a6ff" },
-  solarizedDark:{ label: "Solarized Dark",      bg: "#002b36", text: "#839496", gutter: "#073642", border: "#144652", accent: "#268bd2" },
-  nightOwl:     { label: "Night Owl",           bg: "#011627", text: "#d6deeb", gutter: "#01111d", border: "#1d3b53", accent: "#82aaff" },
-  nord:         { label: "Nord",                bg: "#2e3440", text: "#d8dee9", gutter: "#3b4252", border: "#434c5e", accent: "#88c0d0" },
+export const EDITOR_THEMES: Record< EditorTheme,
+  { label: string; monacoTheme: string } > = {
+
+  light: {
+    label: "Light",
+    monacoTheme: "vs",
+  },
+  dark: {
+    label: "Dark",
+    monacoTheme: "vs-dark",
+  },
+  hcBlack: {
+    label: "High Contrast Dark",
+    monacoTheme: "hc-black",
+  },
+  hcLight: {
+    label: "High Contrast Light",
+    monacoTheme: "hc-light",
+  },
 };
 
-export const FONT_FAMILIES = [
-  "JetBrains Mono",
-  "Fira Code",
-  "Source Code Pro",
-  "Cascadia Code",
-  "Monaco",
-  "Consolas",
-  "Menlo",
-  "monospace",
-];
-
-type Section = "editor" | "appearance" | "autosave" | "keybindings" | "about";
+type Section = "editor" | "appearance" | "autosave" | "about";
 
 const SECTIONS: { id: Section; label: string; icon: ReactNode }[] = [
   { id: "editor",      label: "Editor",       icon: <Type className="w-4 h-4" /> },
   { id: "appearance",  label: "Appearance",   icon: <Palette className="w-4 h-4" /> },
   { id: "autosave",    label: "Auto Save",    icon: <Save className="w-4 h-4" /> },
-  { id: "keybindings", label: "Keybindings",  icon: <Keyboard className="w-4 h-4" /> },
   { id: "about",       label: "About",        icon: <Info className="w-4 h-4" /> },
 ];
 
@@ -172,11 +172,6 @@ export default function EditorDashboard({ settings, onChange, onClose }: EditorD
     onChange(DEFAULT_EDITOR_SETTINGS);
   };
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1800);
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -194,12 +189,6 @@ export default function EditorDashboard({ settings, onChange, onClose }: EditorD
             >
               <RotateCcw className="w-3.5 h-3.5" />
               Reset to defaults
-            </button>
-            <button
-              onClick={handleSave}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs text-white rounded-lg transition-all ${saved ? "bg-green-600" : "bg-indigo-600 hover:bg-indigo-500"}`}
-            >
-              {saved ? <><Check className="w-3.5 h-3.5" />Saved!</> : <><Save className="w-3.5 h-3.5" />Save settings</>}
             </button>
             <button
               onClick={onClose}
@@ -233,7 +222,6 @@ export default function EditorDashboard({ settings, onChange, onClose }: EditorD
             {activeSection === "editor" && <EditorSection settings={settings} set={set} />}
             {activeSection === "appearance" && <AppearanceSection settings={settings} set={set} />}
             {activeSection === "autosave" && <AutoSaveSection settings={settings} set={set} />}
-            {activeSection === "keybindings" && <KeybindingsSection settings={settings} set={set} />}
             {activeSection === "about" && <AboutSection />}
           </div>
         </div>
@@ -254,37 +242,11 @@ function EditorSection({ settings, set }: { settings: EditorSettings; set: <K ex
       <SettingRow label="Font Size" description="Controls the font size in pixels.">
         <NumberInput value={settings.fontSize} onChange={(v) => set("fontSize", v)} min={10} max={28} />
       </SettingRow>
-      <SettingRow label="Font Family" description="The font family used in the editor.">
-        <Select
-          value={settings.fontFamily}
-          onChange={(v) => set("fontFamily", v)}
-          options={FONT_FAMILIES.map((f) => ({ value: f, label: f }))}
-        />
-      </SettingRow>
       <SettingRow label="Line Height" description="Controls the line height multiplier.">
         <Select
           value={String(settings.lineHeight)}
           onChange={(v) => set("lineHeight", parseFloat(v))}
           options={[1.2, 1.4, 1.6, 1.8, 2.0].map((v) => ({ value: String(v), label: String(v) }))}
-        />
-      </SettingRow>
-
-      <SectionTitle>Indentation</SectionTitle>
-      <SettingRow label="Tab Size" description="Number of spaces a tab is equal to.">
-        <Select
-          value={String(settings.tabSize)}
-          onChange={(v) => set("tabSize", parseInt(v))}
-          options={[2, 4, 8].map((v) => ({ value: String(v), label: `${v} spaces` }))}
-        />
-      </SettingRow>
-      <SettingRow label="Indent Style" description="Use spaces or tabs for indentation.">
-        <Select
-          value={settings.indentStyle}
-          onChange={(v) => set("indentStyle", v)}
-          options={[
-            { value: "spaces", label: "Spaces" },
-            { value: "tabs",   label: "Tabs" },
-          ]}
         />
       </SettingRow>
 
@@ -325,49 +287,50 @@ function AppearanceSection({ settings, set }: { settings: EditorSettings; set: <
   return (
     <div>
       <SectionTitle>Color Theme</SectionTitle>
-      <div className="grid grid-cols-2 gap-2.5 mb-2">
-        {Object.entries(EDITOR_THEMES).map(([id, t]) => (
-          <button
-            key={id}
-            onClick={() => set("theme", id)}
-            className={`relative text-left rounded-xl p-3 border-2 transition-all ${
-              settings.theme === id
-                ? "border-indigo-500 ring-1 ring-indigo-500/50"
-                : "border-[#3e3e42] hover:border-[#5a5a5e]"
-            }`}
-            style={{ background: t.bg }}
-          >
-            <div className="flex gap-2 mb-2">
-              <div className="w-8 flex flex-col gap-1" style={{ background: t.gutter, borderRadius: 4, padding: "4px 3px" }}>
-                {[1, 2, 3].map((n) => <div key={n} className="h-1.5 rounded-sm opacity-40" style={{ background: t.text }} />)}
-              </div>
-              <div className="flex-1 flex flex-col gap-1 pt-1">
-                <div className="h-1.5 w-3/4 rounded-sm" style={{ background: t.accent }} />
-                <div className="h-1.5 w-1/2 rounded-sm opacity-60" style={{ background: t.text }} />
-                <div className="h-1.5 w-5/6 rounded-sm opacity-40" style={{ background: t.text }} />
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs" style={{ color: t.text }}>{t.label}</span>
-              {settings.theme === id && <Check className="w-3.5 h-3.5 text-indigo-400" />}
-            </div>
-          </button>
-        ))}
-      </div>
+
+      <SettingRow
+        label="Theme"
+        description="Choose the Monaco editor theme."
+      >
+        <Select
+          value={settings.theme}
+          onChange={(v) => set("theme", v)}
+          options={Object.entries(EDITOR_THEMES).map(([id, theme]) => ({
+            value: id as EditorTheme,
+            label: theme.label,
+          }))}
+        />
+      </SettingRow>
 
       <SectionTitle>Editor Panels</SectionTitle>
+
       <SettingRow label="Minimap" description="Show a miniature overview of the code on the right side.">
         <Toggle checked={settings.minimap} onChange={(v) => set("minimap", v)} />
       </SettingRow>
+
+      <SettingRow label="Minimap Scale" description="Adjust the size of the editor minimap.">
+        <NumberInput
+          value={settings.minimapScale}
+          onChange={(value) =>
+            set("minimapScale", value as 1 | 2 | 3 | 4 | 5)
+          }
+          min={1}
+          max={5}
+        />
+      </SettingRow>
+
       <SettingRow label="Bracket Pair Colorization" description="Colorize matching bracket pairs.">
         <Toggle checked={settings.bracketColorization} onChange={(v) => set("bracketColorization", v)} />
       </SettingRow>
+
       <SettingRow label="Highlight Active Line" description="Highlight the line the cursor is on.">
         <Toggle checked={settings.highlightActiveLine} onChange={(v) => set("highlightActiveLine", v)} />
       </SettingRow>
+
       <SettingRow label="Scroll Beyond Last Line" description="Allow scrolling one screen length past the last line.">
         <Toggle checked={settings.scrollBeyondLastLine} onChange={(v) => set("scrollBeyondLastLine", v)} />
       </SettingRow>
+
     </div>
   );
 }
@@ -396,64 +359,6 @@ function AutoSaveSection({ settings, set }: { settings: EditorSettings; set: <K 
       <SettingRow label="Format on Save" description="Run code formatter when saving a file.">
         <Toggle checked={settings.formatOnSave} onChange={(v) => set("formatOnSave", v)} />
       </SettingRow>
-    </div>
-  );
-}
-
-function KeybindingsSection({ settings, set }: { settings: EditorSettings; set: <K extends keyof EditorSettings>(k: K, v: EditorSettings[K]) => void }) {
-  const keybindings: { id: EditorSettings["keybinding"]; label: string; desc: string; shortcuts: [string, string][] }[] = [
-    {
-      id: "default",
-      label: "Default (VS Code)",
-      desc: "Standard keybindings similar to Visual Studio Code.",
-      shortcuts: [["Ctrl+S", "Save"], ["Ctrl+Enter", "Run"], ["Ctrl+B", "Toggle sidebar"], ["Alt+W", "Close tab"]],
-    },
-    {
-      id: "vim",
-      label: "Vim",
-      desc: "Vim-style modal editing keybindings.",
-      shortcuts: [["i", "Insert mode"], ["Esc", "Normal mode"], [":w", "Save"], [":q", "Quit"]],
-    },
-    {
-      id: "emacs",
-      label: "Emacs",
-      desc: "Emacs-style keybindings using Ctrl/Meta combinations.",
-      shortcuts: [["C-x C-s", "Save"], ["C-x C-c", "Quit"], ["C-g", "Cancel"], ["M-x", "Command"]],
-    },
-  ];
-
-  return (
-    <div className="space-y-3">
-      <SectionTitle>Keybinding Preset</SectionTitle>
-      {keybindings.map((kb) => (
-        <button
-          key={kb.id}
-          onClick={() => set("keybinding", kb.id)}
-          className={`w-full text-left rounded-xl p-4 border-2 transition-all ${
-            settings.keybinding === kb.id
-              ? "border-indigo-500 bg-indigo-600/10"
-              : "border-[#3e3e42] bg-[#252526] hover:border-[#5a5a5e]"
-          }`}
-        >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-sm text-white">{kb.label}</span>
-            {settings.keybinding === kb.id && (
-              <span className="flex items-center gap-1 text-xs text-indigo-400">
-                <Check className="w-3.5 h-3.5" /> Active
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-gray-500 mb-3">{kb.desc}</p>
-          <div className="flex flex-wrap gap-2">
-            {kb.shortcuts.map(([key, label]) => (
-              <span key={key} className="flex items-center gap-1.5 text-xs text-gray-400">
-                <kbd className="px-1.5 py-0.5 bg-[#3c3c3c] border border-[#5a5a5e] rounded text-gray-300 text-[10px] font-mono">{key}</kbd>
-                {label}
-              </span>
-            ))}
-          </div>
-        </button>
-      ))}
     </div>
   );
 }
