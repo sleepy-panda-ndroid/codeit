@@ -4,6 +4,7 @@ import { z } from "zod";
 import { authJwt } from "../middleware/authJwt";
 import { requireProjectRole } from "../middleware/requireProjectRole";
 import { executeCode } from "../services/execution.service";
+import { executeLimiter } from "../middleware/rateLimit";
 
 export const executionRouter = Router();
 
@@ -15,7 +16,8 @@ const executeSchema = z.object({
 });
 
 executionRouter.post(
-  "/projects/:id/execute",
+  "/projects/:id/execute", 
+  executeLimiter,
   authJwt,
   requireProjectRole(["OWNER", "WRITER", "READER"]),
   async (req: any, res, next) => {

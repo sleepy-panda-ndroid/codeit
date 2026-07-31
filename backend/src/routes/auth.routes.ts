@@ -4,6 +4,7 @@ import { z } from "zod";
 import { User } from "../db/models/User";
 import { hashPassword, verifyPassword, signJwt } from "../services/auth.service";
 import { authJwt } from "../middleware/authJwt";
+import { authLimiter } from "../middleware/rateLimit";
 
 export const authRouter = Router();
 
@@ -45,7 +46,7 @@ const signupSchema = z.object({
 });
 
 // sign up
-authRouter.post("/signup", async (req, res) => {
+authRouter.post("/signup", authLimiter, async (req, res) => {
   const parsed = signupSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
 
@@ -74,7 +75,7 @@ const loginSchema = z.object({
 
 
 // login 
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", authLimiter, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
 

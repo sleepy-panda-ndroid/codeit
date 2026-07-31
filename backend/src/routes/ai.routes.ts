@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { authJwt } from "../middleware/authJwt";
 import { requestAIChat } from "../services/ai.service";
+import { aiLimiter } from "../middleware/rateLimit";
 
 export const aiRouter = Router();
 
@@ -19,7 +20,11 @@ const chatSchema = z.object({
   maxTokens: z.number().int().min(32).max(4000).optional(),
 });
 
-aiRouter.post("/chat", authJwt, async (req, res, next) => {
+aiRouter.post(
+  "/chat", 
+  aiLimiter, 
+  authJwt, 
+  async (req, res, next) => {
   try {
     const parsed = chatSchema.safeParse(req.body);
     if (!parsed.success) {
