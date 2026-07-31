@@ -36,6 +36,7 @@ interface FileExplorerProps {
   }) => Promise<void>;
   onRenameNode: (nodeId: string, name: string) => Promise<void>;
   onDeleteNode: (nodeId: string) => Promise<void>;
+  onMoveNode?: (nodeId: string, parentId: string | null) => Promise<void>;
 }
 
 type TreeNode = ProjectNode & { children: TreeNode[] };
@@ -111,6 +112,14 @@ interface ExplorerCtx {
   onFileOpen: (node: ProjectNode) => void;
   handleDelete: (node: ProjectNode) => Promise<void>;
   siblingsOf: (parentId: string | null) => ProjectNode[];
+
+  // for drag and drop moving
+  onMoveNode?: (nodeId: string, parentId: string | null) => Promise<void>;
+  draggingId: string | null;
+  setDraggingId: (id: string | null) => void;
+  dragOverId: string | null;
+  setDragOverId: (id: string | null) => void;
+  performMove: (targetFolderId: string | null) => Promise<void>;
 }
 
 const Ctx = createContext<ExplorerCtx | null>(null);
@@ -129,11 +138,25 @@ export default function FileExplorer({
   onCreateNode,
   onRenameNode,
   onDeleteNode,
+  onMoveNode,
 }: FileExplorerProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [creatingParent, setCreatingParent] = useState<{ parentId: string | null } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  const performMove = async (targetFolderId: string | null) => {
+    const id = draggingId;
+    setDraggingId(null);
+    setDragOverId(null);
+    if (!id || !onMoveNode) return;
+    if (targetFolderId) {
+      setCollapsed((prev) => { const n = new Set(prev); n.delete(targetFolderId); return n; });
+    }
+    await onMoveNode(id, targetFolderId);
+  };
 
   const tree = useMemo(() => buildTree(nodes), [nodes]);
 
@@ -225,6 +248,7 @@ export default function FileExplorer({
     creatingParent, startCreate, cancelCreate, commitCreate,
     editingId, startRename, cancelRename, commitRename,
     onFileOpen, handleDelete, siblingsOf,
+    onMoveNode, draggingId, setDraggingId, dragOverId, setDragOverId, performMove,
   };
 
   return (
@@ -251,7 +275,11 @@ export default function FileExplorer({
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto py-1">
+        <div
+          className={`flex-1 overflow-y-auto py-1 ${dragOverId === "__root__" ? "bg-indigo-600/10" : ""}`}
+          onDragOver={(e) => { if (draggingId) { e.preventDefault(); setDragOverId("__root__"); } }}
+          onDrop={(e) => { e.preventDefault(); void performMove(null); }}
+        >
           {nodes.length === 0 && !creatingParent && (
             <div className="px-3 py-4 text-xs text-gray-500">No files yet. Use + to add one.</div>
           )}
@@ -277,7 +305,23 @@ function NodeRow({ node, level }: { node: TreeNode; level: number }) {
     return (
       <div>
         <div
-          className="group w-full flex items-center gap-1.5 py-1 text-sm hover:bg-[#2a2d2e]"
+          draggable={!ctx.readOnly}
+          onDragStart={(e) => { e.stopPropagation(); ctx.setDraggingId(node.id); }}
+          onDragEnd={() => { ctx.setDraggingId(null); ctx.setDragOverId(null); }}
+          onDragOver={(e) => {
+            if (ctx.draggingId && ctx.draggingId !== node.id) {
+              e.preventDefault();
+              e.stopPropagation();
+              ctx.setDragOverId(node.id);
+            }
+          }}
+          onDragLeave={(e) => { e.stopPropagation(); if (ctx.dragOverId === node.id) ctx.setDragOverId(null); }}
+          onDrop={(e) => { e.preventDefault(); e.stopPropagation(); void ctx.performMove(node.id); }}
+          className={`group w-full flex items-center gap-1.5 py-1 text-sm ${
+            ctx.dragOverId === node.id
+              ? "bg-indigo-600/30 ring-1 ring-inset ring-indigo-500"
+              : "hover:bg-[#2a2d2e]"
+          }`}
           style={{ paddingLeft: `${leftPad}px`, paddingRight: "8px" }}
         >
           <button
@@ -325,6 +369,9 @@ function NodeRow({ node, level }: { node: TreeNode; level: number }) {
   const isActive = ctx.activeNodeId === node.id;
   return (
     <div
+      draggable={!ctx.readOnly}
+      onDragStart={(e) => { e.stopPropagation(); ctx.setDraggingId(node.id); }}
+      onDragEnd={() => { ctx.setDraggingId(null); ctx.setDragOverId(null); }}
       className={`group flex items-center gap-2 py-1.5 text-sm ${isActive ? "bg-indigo-600/20" : "hover:bg-[#2a2d2e]"}`}
       style={{ paddingLeft: `${leftPad + 16}px`, paddingRight: "8px" }}
     >

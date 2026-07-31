@@ -48,3 +48,14 @@ export async function deleteNode(projectId: string, nodeId: string) {
     { method: "DELETE" }
   );
 }
+
+export async function moveNode(
+  projectId: string,
+  nodeId: string,
+  parentId: string | null
+) {
+  return apiFetch<ProjectNode>(`/projects/${projectId}/nodes/${nodeId}/move`, {
+    method: "PATCH",
+    body: JSON.stringify({ parentId }),
+  });
+}

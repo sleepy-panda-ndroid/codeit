@@ -204,3 +204,71 @@ nodeRouter.delete(
     res.json({ ok: true, deletedCount: 1 });
   }
 );
+
+
+// Move a node to a different folder (WRITER+)
+const moveSchema = z.object({ parentId: z.string().nullable() });
+nodeRouter.patch(
+  "/projects/:id/nodes/:nodeId/move",
+  authJwt,
+  requireProjectRole(["OWNER", "WRITER"]),
+  async (req: any, res) => {
+    const parsed = moveSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
+
+    const projectId = req.params.id;
+    const nodeId = req.params.nodeId;
+
+    const node = await NodeModel.findOne({ _id: nodeId, projectId });
+    if (!node) return res.status(404).json({ error: "Node not found" });
+
+    // Resolve + validate destination (null = root)
+    let newParentId: mongoose.Types.ObjectId | null = null;
+    if (parsed.data.parentId) {
+      if (!mongoose.isValidObjectId(parsed.data.parentId)) {
+        return res.status(400).json({ error: "Invalid parent id" });
+      }
+      if (parsed.data.parentId === nodeId) {
+        return res.status(400).json({ error: "Cannot move a node into itself" });
+      }
+
+      const parent = await NodeModel.findOne({
+        _id: parsed.data.parentId,
+        projectId,
+        type: "folder",
+      });
+      if (!parent) {
+        return res.status(400).json({ error: "Destination folder not found" });
+      }
+
+      // cycle guard: destination must not sit inside the node's own subtree
+      if (node.type === "folder") {
+        const subtree = await collectSubtreeIds(projectId, node._id);
+        if (subtree.some((id) => String(id) === parsed.data.parentId)) {
+          return res
+            .status(400)
+            .json({ error: "Cannot move a folder into its own subtree" });
+        }
+      }
+      newParentId = parent._id;
+    }
+
+    // no-op if it's already there
+    if (String(node.parentId ?? "") === String(newParentId ?? "")) {
+      return res.json(toNode(node));
+    }
+
+    try {
+      node.parentId = newParentId;
+      await node.save();
+      res.json(toNode(node));
+    } catch (e: any) {
+      if (e?.code === 11000) {
+        return res.status(409).json({
+          error: "A file or folder with that name already exists in the destination",
+        });
+      }
+      throw e;
+    }
+  }
+);

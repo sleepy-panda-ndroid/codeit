@@ -28,12 +28,12 @@ import {
   createNode,
   deleteNode,
   listNodes,
+  moveNode,
   renameNode,
   saveNode,
   type ProjectNode,
   type NodeType,
 } from "../../lib/nodes";
-
 import { executeProjectCode, type ExecutionLanguage } from "../../lib/execution";
 import { getProject } from "../../lib/projects";
 
@@ -521,6 +521,34 @@ export default function IDEPage() {
     }
   }, [projectId, readOnly]);
 
+  const handleMoveNode = useCallback(async (nodeId: string, parentId: string | null) => {
+    if (!projectId || readOnly) return;
+
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    if ((node.parentId ?? null) === (parentId ?? null)) return; // no-op
+
+    if (node.type === "folder" && parentId) {
+      const subtree = collectLocalSubtreeIds(nodes, nodeId);
+      if (subtree.has(parentId)) {
+        setFileError("Cannot move a folder into its own subtree");
+        return;
+      }
+    }
+
+    setFileBusy(true);
+    setFileError("");
+
+    try {
+      const updated = await moveNode(projectId, nodeId, parentId);
+      setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, parentId: updated.parentId } : n)));
+    } catch (err) {
+      setFileError(err instanceof Error ? err.message : "Failed to move");
+    } finally {
+      setFileBusy(false);
+    }
+  }, [nodes, projectId, readOnly]);
+
   const handleDeleteNode = useCallback(async (nodeId: string) => {
     if (!projectId || readOnly) return;
 
@@ -832,6 +860,7 @@ export default function IDEPage() {
               onCreateNode={handleCreateNode}
               onRenameNode={handleRenameNode}
               onDeleteNode={handleDeleteNode}
+              onMoveNode={handleMoveNode}
             />
           </div>
         )}
