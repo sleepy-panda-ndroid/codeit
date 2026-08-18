@@ -12,6 +12,7 @@ import {
   Clock,
   AlertCircle,
   Settings,
+  Users,
 } from "lucide-react";
 
 import { Button } from "../components/ui/button";
@@ -36,6 +37,9 @@ import {
 } from "../../lib/nodes";
 import { executeProjectCode, type ExecutionLanguage } from "../../lib/execution";
 import { getProject } from "../../lib/projects";
+import { getStoredToken, getStoredUser } from "../../lib/auth";
+import * as Y from "yjs";
+import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from "y-protocols/awareness";
 
 interface OpenFile {
   id: string; // node id
@@ -59,6 +63,15 @@ interface PersistedIdeState {
 
 type SaveStatus = "saved" | "saving" | "unsaved";
 type Role = "OWNER" | "WRITER" | "READER";
+type CollabStatus = "idle" | "connecting" | "syncing" | "ready" | "error";
+
+type CollaboratorPresence = {
+  clientId: number;
+  userId: string;
+  name: string;
+  email: string;
+  color: string;
+};
 
 const EDITOR_SETTINGS_STORAGE_KEY = "codeit:editor-dashboard-settings";
 
@@ -245,6 +258,70 @@ function getExecutionErrorStatus(message: string): ExecutionResult["status"] {
   return "backend_failure";
 }
 
+function hashToColor(input: string): string {
+  let hash = 0;
+  for (let index = 0; index < input.length; index += 1) {
+    hash = (hash * 31 + input.charCodeAt(index)) | 0;
+  }
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue} 72% 58%)`;
+}
+
+function replaceTextContent(text: Y.Text, nextValue: string): void {
+  const currentValue = text.toString();
+  if (currentValue === nextValue) return;
+
+  let prefix = 0;
+  while (prefix < currentValue.length && prefix < nextValue.length && currentValue[prefix] === nextValue[prefix]) {
+    prefix += 1;
+  }
+
+  let currentSuffix = currentValue.length - 1;
+  let nextSuffix = nextValue.length - 1;
+  while (currentSuffix >= prefix && nextSuffix >= prefix && currentValue[currentSuffix] === nextValue[nextSuffix]) {
+    currentSuffix -= 1;
+    nextSuffix -= 1;
+  }
+
+  const deleteCount = currentSuffix - prefix + 1;
+  const insertValue = nextValue.slice(prefix, nextSuffix + 1);
+
+  if (deleteCount > 0) {
+    text.delete(prefix, deleteCount);
+  }
+  if (insertValue) {
+    text.insert(prefix, insertValue);
+  }
+}
+
+function buildCollabWsUrl(projectId: string, nodeId: string, token: string): string {
+  const apiBase = import.meta.env.VITE_API_BASE || "http://localhost:4000";
+  const wsBase = apiBase.replace(/^http/, "ws");
+  const url = new URL(`${wsBase}/ws/collab`);
+  url.searchParams.set("token", token);
+  url.searchParams.set("projectId", projectId);
+  url.searchParams.set("nodeId", nodeId);
+  return url.toString();
+}
+
+function toCollaborators(awareness: Awareness): CollaboratorPresence[] {
+  return Array.from(awareness.getStates().entries())
+    .map(([clientId, state]) => {
+      const user = state as Partial<CollaboratorPresence> | undefined;
+      if (!user || typeof user.userId !== "string" || typeof user.name !== "string") {
+        return null;
+      }
+      return {
+        clientId,
+        userId: user.userId,
+        name: user.name,
+        email: typeof user.email === "string" ? user.email : "",
+        color: typeof user.color === "string" ? user.color : hashToColor(user.userId),
+      };
+    })
+    .filter((item): item is CollaboratorPresence => !!item);
+}
+
 export default function IDEPage() {
   const navigate = useNavigate();
   const { projectId } = useParams();
@@ -264,15 +341,27 @@ export default function IDEPage() {
   const [showEditorSettings, setShowEditorSettings] = useState(false);
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(() => loadEditorDashboardSettings());
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
+  const [collabStatus, setCollabStatus] = useState<CollabStatus>("idle");
+  const [collaborators, setCollaborators] = useState<CollaboratorPresence[]>([]);
   const [closeConfirm, setCloseConfirm] = useState<{ fileId: string; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [fileBusy, setFileBusy] = useState(false);
   const [fileError, setFileError] = useState("");
   const hasHydratedProjectStateRef = useRef(false);
+  const collabDocRef = useRef<Y.Doc | null>(null);
+  const collabTextRef = useRef<Y.Text | null>(null);
+  const collabAwarenessRef = useRef<Awareness | null>(null);
+  const collabSocketRef = useRef<WebSocket | null>(null);
+  const collabReadyRef = useRef(false);
+  const activeFileIdRef = useRef("");
 
   const readOnly = role === "READER";
 
   const activeFile = openFiles.find((f) => f.id === activeFileId) ?? null;
+
+  useEffect(() => {
+    activeFileIdRef.current = activeFileId;
+  }, [activeFileId]);
 
   const loadProject = useCallback(async () => {
     if (!projectId) {
@@ -355,6 +444,137 @@ export default function IDEPage() {
   }, [editorSettings]);
 
   useEffect(() => {
+    const activeFileIdValue = activeFile?.id ?? "";
+    let disposed = false;
+
+    if (!projectId || !activeFileIdValue || loading) {
+      collabSocketRef.current?.close();
+      collabSocketRef.current = null;
+      collabDocRef.current?.destroy();
+      collabDocRef.current = null;
+      collabTextRef.current = null;
+      collabAwarenessRef.current?.destroy();
+      collabAwarenessRef.current = null;
+      collabReadyRef.current = false;
+      setCollabStatus("idle");
+      setCollaborators([]);
+      return;
+    }
+
+    const token = getStoredToken();
+    const user = getStoredUser();
+    if (!token || !user) {
+      setCollabStatus("error");
+      return;
+    }
+
+    const doc = new Y.Doc();
+    const text = doc.getText("content");
+    const awareness = new Awareness(doc);
+    const socket = new WebSocket(buildCollabWsUrl(projectId, activeFileIdValue, token));
+
+    socket.binaryType = "arraybuffer";
+    collabDocRef.current = doc;
+    collabTextRef.current = text;
+    collabAwarenessRef.current = awareness;
+    collabSocketRef.current = socket;
+    collabReadyRef.current = false;
+    setCollabStatus("connecting");
+    setCollaborators([]);
+
+    const refreshCollaborators = () => {
+      setCollaborators(toCollaborators(awareness));
+    };
+
+    const syncActiveFileContent = () => {
+      const nextValue = text.toString();
+      setOpenFiles((prev) => prev.map((file) => (
+        file.id === activeFileIdRef.current ? { ...file, content: nextValue } : file
+      )));
+    };
+
+    const localPresence = {
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      color: hashToColor(user.id),
+    };
+
+    const sendLocalPresence = () => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+      socket.send(JSON.stringify({ type: "hello", clientId: doc.clientID, name: user.name, email: user.email }));
+      awareness.setLocalState(localPresence);
+      socket.send(new Uint8Array([1, ...Array.from(encodeAwarenessUpdate(awareness, [doc.clientID]))]));
+    };
+
+    text.observe(() => {
+      syncActiveFileContent();
+      refreshCollaborators();
+    });
+
+    doc.on("update", (update: Uint8Array, origin: unknown) => {
+      if (origin === "remote") return;
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(new Uint8Array([0, ...Array.from(update)]));
+      }
+    });
+
+    awareness.on("update", () => {
+      refreshCollaborators();
+    });
+
+    socket.onopen = () => {
+      if (disposed) return;
+      setCollabStatus("syncing");
+      sendLocalPresence();
+    };
+
+    socket.onmessage = (event) => {
+      if (typeof event.data === "string") return;
+
+      const payload = event.data instanceof ArrayBuffer ? new Uint8Array(event.data) : new Uint8Array(event.data);
+      if (!payload.length) return;
+
+      const messageType = payload[0];
+      const message = payload.slice(1);
+
+      if (messageType === 0) {
+        Y.applyUpdate(doc, message, "remote");
+        collabReadyRef.current = true;
+        setCollabStatus("ready");
+        return;
+      }
+
+      if (messageType === 1) {
+        applyAwarenessUpdate(awareness, message, "remote");
+        refreshCollaborators();
+      }
+    };
+
+    socket.onerror = () => {
+      if (disposed) return;
+      setCollabStatus("error");
+    };
+
+    socket.onclose = () => {
+      if (disposed) return;
+      setCollabStatus("error");
+    };
+
+    return () => {
+      disposed = true;
+      socket.close();
+      awareness.destroy();
+      doc.destroy();
+      if (collabSocketRef.current === socket) collabSocketRef.current = null;
+      if (collabDocRef.current === doc) collabDocRef.current = null;
+      if (collabTextRef.current === text) collabTextRef.current = null;
+      if (collabAwarenessRef.current === awareness) collabAwarenessRef.current = null;
+      collabReadyRef.current = false;
+    };
+  }, [activeFile?.id, loading, projectId]);
+
+  useEffect(() => {
     if (!projectId || !hasHydratedProjectStateRef.current || typeof window === "undefined") return;
 
     const drafts = openFiles.reduce<Record<string, string>>((accumulator, file) => {
@@ -380,7 +600,13 @@ export default function IDEPage() {
   }, [activeFileId, openFiles, projectId, showAIPanel, showSidebar, showTerminal, stdin]);
 
   const handleCodeChange = useCallback((value: string) => {
-    setOpenFiles((prev) => prev.map((f) => (f.id === activeFileId ? { ...f, content: value } : f)));
+    const text = collabTextRef.current;
+    if (!text || !collabReadyRef.current) {
+      setOpenFiles((prev) => prev.map((f) => (f.id === activeFileId ? { ...f, content: value } : f)));
+      return;
+    }
+
+    replaceTextContent(text, value);
   }, [activeFileId]);
 
   const handleFileOpen = useCallback((node: ProjectNode) => {
@@ -683,6 +909,13 @@ export default function IDEPage() {
     }));
   }, [openFiles]);
 
+  const collabPillLabel = useMemo(() => {
+    if (collabStatus === "ready") return `${collaborators.length} online`;
+    if (collabStatus === "syncing" || collabStatus === "connecting") return "Syncing…";
+    if (collabStatus === "error") return "Offline";
+    return "Local";
+  }, [collabStatus, collaborators.length]);
+
   const langLabel = activeFile ? (LANGUAGE_DISPLAY[activeFile.language] ?? activeFile.language) : "";
   const initials = useMemo(() => (role === "OWNER" ? "OW" : role === "WRITER" ? "ED" : "RD"), [role]);
   const updateEditorSettings = useCallback((next: EditorSettings) => {
@@ -762,6 +995,17 @@ export default function IDEPage() {
           <span className="text-sm text-gray-200">{projectName}</span>
           <span className="text-xs text-gray-600">·</span>
           <span className="text-xs text-gray-500">{langLabel}</span>
+
+          <span className={`ml-2 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
+            collabStatus === "ready"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+              : collabStatus === "error"
+                ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
+                : "border-slate-500/30 bg-slate-500/10 text-slate-300"
+          }`}>
+            <Users className="w-3 h-3" />
+            {collabPillLabel}
+          </span>
 
           {activeFile && (
             <>
@@ -884,7 +1128,7 @@ export default function IDEPage() {
                 language={activeFile.language}
                 onChange={handleCodeChange}
                 settings={editorSettings}
-                readOnly={readOnly}
+                readOnly={readOnly || collabStatus === "connecting" || collabStatus === "syncing"}
               />
             ) : (
               <div className="flex items-center justify-center h-full text-gray-600">

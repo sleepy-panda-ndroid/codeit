@@ -8,6 +8,7 @@ import { NodeModel } from "../db/models/Node";
 import { Notification } from "../db/models/Notification";
 import { requireProjectReadAccess } from "../middleware/requireProjectReadAccess";
 import mongoose from "mongoose";
+import { removeRoomsForProject } from "../ws/roomRegistry";
 
 export const projectRouter = Router();
 const createSchema = z.object({
@@ -235,6 +236,7 @@ projectRouter.delete(
   async (req: any, res) => {
     const projectId = req.params.id;
 
+    removeRoomsForProject(projectId);
     await Project.deleteOne({ _id: projectId });
     await Promise.all([
       ProjectAccess.deleteMany({ projectId }),

@@ -6,6 +6,7 @@ import { requireProjectRole } from "../middleware/requireProjectRole";
 import { requireProjectReadAccess } from "../middleware/requireProjectReadAccess";
 import { NodeModel } from "../db/models/Node";
 import { normalizeNodeName } from "../utils/nodeName";
+import { removeRoom, roomKey } from "../ws/roomRegistry";
 
 export const nodeRouter = Router({ mergeParams: true });
 
@@ -196,11 +197,16 @@ nodeRouter.delete(
 
     if (node.type === "folder") {
       const ids = await collectSubtreeIds(projectId, node._id);
+      const files = await NodeModel.find({ _id: { $in: ids }, projectId, type: "file" })
+        .select("_id")
+        .lean();
       await NodeModel.deleteMany({ _id: { $in: ids } });
+      files.forEach((file) => removeRoom(roomKey(projectId, String(file._id))));
       return res.json({ ok: true, deletedCount: ids.length });
     }
 
     await NodeModel.deleteOne({ _id: node._id });
+    removeRoom(roomKey(projectId, String(node._id)));
     res.json({ ok: true, deletedCount: 1 });
   }
 );
