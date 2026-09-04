@@ -1,11 +1,10 @@
 "use client";
 
-import { Outlet, Link, useLocation, useNavigate } from "react-router";
-import { 
-  LayoutDashboard, 
-  FolderGit2, 
-  Users, 
-  Sparkles, 
+import { Outlet, Link, useLocation, useNavigate, useSearchParams } from "react-router";
+import {
+  LayoutDashboard,
+  FolderGit2,
+  Users,
   Settings,
   Bell,
   Search,
@@ -36,10 +35,14 @@ import {
 } from "../../lib/auth";
 import { getNotificationCount } from "../../lib/notification";
 
+const DASHBOARD_ROUTES = ["/app", "/app/projects", "/app/shared"];
 
 export default function DashboardLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchQuery = searchParams.get("q") ?? "";
+
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [userName, setUserName] = useState("User");
   const [userEmail, setUserEmail] = useState("user@example.com");
@@ -50,7 +53,7 @@ export default function DashboardLayout() {
     { path: "/app", label: "Dashboard", icon: LayoutDashboard },
     { path: "/app/projects", label: "My Projects", icon: FolderGit2 },
     { path: "/app/shared", label: "Shared Projects", icon: Users },
-    { path: "/app/notifications", label: "Notifications", icon: Bell },
+    { path: "/app/notifications", label: "Notifications", icon: Bell},
     { path: "/app/settings", label: "Settings", icon: Settings },
   ];
 
@@ -59,6 +62,23 @@ export default function DashboardLayout() {
       return location.pathname === "/app";
     }
     return location.pathname.startsWith(path);
+  };
+
+  const handleSearchChange = (value: string) => {
+    if (DASHBOARD_ROUTES.includes(location.pathname)) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value) next.set("q", value);
+          else next.delete("q");
+          return next;
+        },
+        { replace: true }
+      );
+    } else {
+      // typing from a non-list page jumps to the dashboard, filtered
+      navigate(value ? `/app?q=${encodeURIComponent(value)}` : "/app");
+    }
   };
 
   const initials = useMemo(() => {
@@ -111,7 +131,9 @@ export default function DashboardLayout() {
       if (!stored) return;
       setUserName(stored.name || "User");
       setUserEmail(stored.email || "user@example.com");
-      setUserAvatar(stored.avatarDataUrl || "");
+      if (stored.avatarDataUrl !== undefined) {
+        setUserAvatar(stored.avatarDataUrl);
+      }
     };
 
     window.addEventListener(AUTH_SESSION_CHANGED_EVENT, syncUser);
@@ -123,7 +145,7 @@ export default function DashboardLayout() {
   return (
     <div className="flex h-screen bg-[#1e1e1e] text-white overflow-hidden">
       {/* Sidebar */}
-      <aside 
+      <aside
         className={`${
           sidebarOpen ? 'w-64' : 'w-0'
         } bg-[#252526] border-r border-[#3e3e42] transition-all duration-300 flex flex-col overflow-hidden`}
@@ -152,18 +174,6 @@ export default function DashboardLayout() {
           })}
         </nav>
 
-        <div className="p-4 border-t border-[#3e3e42]">
-          <div className="flex items-center gap-3 px-3 py-2">
-            <Avatar className="w-8 h-8">
-              <AvatarImage src={userAvatar} />
-              <AvatarFallback className="bg-indigo-600 text-white">{initials}</AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{userName}</p>
-              <p className="text-xs text-gray-400 truncate">{userEmail}</p>
-            </div>
-          </div>
-        </div>
       </aside>
 
       {/* Main Content */}
@@ -183,27 +193,21 @@ export default function DashboardLayout() {
             <div className="relative w-96 max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
-                placeholder="Search projects, files..."
+                value={searchQuery}
+                type="search"
+                name="project-search"
+                autoComplete="off"
+                onChange={(e) => {
+                  if (document.activeElement !== e.currentTarget) return;
+                  handleSearchChange(e.target.value);
+                }}
+                placeholder="Search projects..."
                 className="pl-10 bg-[#1e1e1e] border-[#3e3e42] text-white placeholder:text-gray-500"
               />
             </div>
           </div>
 
           <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-gray-300 hover:text-white hover:bg-[#2a2d2e] relative"
-              onClick={() => navigate("/app/notifications")}
-            >
-              <Bell className="w-5 h-5" />
-              {notificationCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-indigo-600 text-[10px] font-semibold text-white flex items-center justify-center">
-                  {notificationCount > 9 ? "9+" : notificationCount}
-                </span>
-              )}
-            </Button>
-
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="outline-none">
@@ -213,8 +217,8 @@ export default function DashboardLayout() {
                   </Avatar>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent 
-                align="end" 
+              <DropdownMenuContent
+                align="end"
                 className="w-56 bg-[#252526] border border-[#3e3e42] text-white shadow-lg"
               >
                 <DropdownMenuLabel className="text-white px-2 py-1.5">
@@ -224,15 +228,7 @@ export default function DashboardLayout() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-[#3e3e42] my-1" />
-                <DropdownMenuItem 
-                  onClick={() => navigate("/app/settings")}
-                  className="text-gray-300 hover:text-white hover:bg-[#2a2d2e] cursor-pointer flex items-center px-2 py-1.5"
-                >
-                  <Settings className="w-4 h-4 mr-2" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-[#3e3e42] my-1" />
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   onClick={handleLogout}
                   className="text-red-400 hover:text-red-300 hover:bg-red-950/30 cursor-pointer flex items-center px-2 py-1.5"
                 >

@@ -151,26 +151,6 @@ export default function SignupPage() {
             {error && <p className="text-sm text-red-400">{error}</p>}
           </form>
 
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/10"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-[#1e1e1e] text-gray-400">Or sign up with</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Button variant="outline" className="border-white/10 text-white hover:bg-white/5">
-              <Github className="w-5 h-5 mr-2" />
-              GitHub
-            </Button>
-            <Button variant="outline" className="border-white/10 text-white hover:bg-white/5">
-              <Mail className="w-5 h-5 mr-2" />
-              Google
-            </Button>
-          </div>
-
           <p className="mt-6 text-xs text-center text-gray-500">
             By signing up, you agree to our{" "}
             <a href="#" className="text-indigo-400 hover:text-indigo-300">Terms of Service</a>

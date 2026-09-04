@@ -37,12 +37,13 @@ shareRouter.post(
     }
 
     const email =
-      validator.normalizeEmail(parsed.data.email) ?? parsed.data.email.toLowerCase();
+      validator.normalizeEmail(parsed.data.email) ??
+      parsed.data.email.toLowerCase();
     const role = parsed.data.role;
 
     const [targetUser, project] = await Promise.all([
       User.findOne({ email }).select("_id name email"),
-      Project.findById(projectId).select("_id name ownerId"),
+      Project.findById(projectId).select("_id name"),
     ]);
 
     if (!targetUser) {
@@ -51,10 +52,6 @@ shareRouter.post(
 
     if (!project) {
       return res.status(404).json({ error: "Project not found" });
-    }
-
-    if (String(targetUser._id) === String(project.ownerId)) {
-      return res.status(400).json({ error: "Owner already has access" });
     }
 
     const existing = await ProjectAccess.findOne({
@@ -67,7 +64,9 @@ shareRouter.post(
     }
 
     if (existing?.status === "ACCEPTED") {
-      return res.status(400).json({ error: "User is already a collaborator" });
+      return res
+        .status(400)
+        .json({ error: "User is already a collaborator" });
     }
 
     const access = await ProjectAccess.findOneAndUpdate(
@@ -109,6 +108,18 @@ shareRouter.post(
         setDefaultsOnInsert: true,
       }
     );
+
+
+    // keep only the 50 most recent notifications for this user
+    const stale = await Notification.find({ userId: targetUser._id })
+      .sort({ createdAt: -1 })
+      .skip(50)
+      .select("_id")
+      .lean();
+
+    if (stale.length) {
+      await Notification.deleteMany({ _id: { $in: stale.map((s) => s._id) } });
+    }
 
     return res.json({
       ok: true,
@@ -243,11 +254,10 @@ shareRouter.post(
     access.status = "ACCEPTED";
     await access.save();
 
-    await Notification.deleteOne({
-      accessId: access._id,
-      userId: req.userId,
-      type: "PROJECT_INVITE",
-    });
+    await Notification.updateOne(
+      { accessId: access._id, userId: req.userId, type: "PROJECT_INVITE" },
+      { $set: { status: "ACCEPTED", resolvedAt: new Date() } }
+    );
 
     return res.json({
       ok: true,
@@ -279,11 +289,10 @@ shareRouter.post(
       return res.status(404).json({ error: "Pending invite not found" });
     }
 
-    await Notification.deleteOne({
-      accessId: access._id,
-      userId: req.userId,
-      type: "PROJECT_INVITE",
-    });
+    await Notification.updateOne(
+      { accessId: access._id, userId: req.userId, type: "PROJECT_INVITE" },
+      { $set: { status: "DECLINED", resolvedAt: new Date() } }
+    );
 
     await ProjectAccess.deleteOne({
       _id: access._id,

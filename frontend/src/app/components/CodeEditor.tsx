@@ -42,6 +42,7 @@ export default function CodeEditor({
           },
           wordWrap: settings.wordWrap ? "on" : "off",
           lineNumbers: settings.lineNumbers ? "on" : "off",
+          renderLineHighlight: settings.highlightActiveLine ? "line" : "none",
           tabSize: settings.tabSize,
           cursorStyle:
             settings.cursorStyle === "line"

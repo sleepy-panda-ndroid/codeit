@@ -1,21 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useParams } from "react-router";
 import {
-  Play,
-  Save,
   File,
   Loader2,
-  PanelLeftClose,
-  PanelLeft,
-  Bot,
-  CheckCheck,
   Clock,
   AlertCircle,
-  Settings,
 } from "lucide-react";
 
 import { Button } from "../components/ui/button";
-import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import FileExplorer from "../components/FileExplorer";
 import CodeEditor from "../components/CodeEditor";
 import TerminalPanel, { ExecutionResult } from "../components/TerminalPanel";
@@ -23,44 +15,49 @@ import AIChatPanel from "../components/AIChatPanel";
 
 import EditorDashboard, { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from "../components/EditorDashboard";
 import EditorTabs from "../components/EditorTabs";
+import IDEHeader from "../components/IDEHeader";
+import type { CollaboratorPresence, PersistedIdeState, Role, SaveStatus, CollabStatus } from "../ide/ideTypes";
+import {
+  EDITOR_SETTINGS_STORAGE_KEY,
+  LANGUAGE_DISPLAY,
+  buildCollabWsUrl,
+  buildNodePathMap,
+  collectLocalSubtreeIds,
+  executionLanguageFromName,
+  formatContentOnSave,
+  getExecutionErrorStatus,
+  getIdeStorageKey,
+  hashToColor,
+  languageFromName,
+  loadPersistedIdeState,
+  mapExecutionResultToTerminal,
+  mapNodeToOpenFile,
+  replaceTextContent,
+  toCollaborators,
+  truncateForAI,
+} from "../ide/ideUtils";
+import { useOpenFiles } from "../ide/hooks/useOpenFiles";
 
 import {
-  createFile,
-  deleteFile,
-  listFiles,
-  renameFile,
-  saveFile,
-  type ProjectFile,
-} from "../../lib/files";
-
-import { executeProjectCode, type ExecutionLanguage } from "../../lib/execution";
+  createNode,
+  deleteNode,
+  listNodes,
+  moveNode,
+  renameNode,
+  saveNode,
+  type ProjectNode,
+  type NodeType,
+} from "../../lib/nodes";
+import type { AIChatContext } from "../../lib/ai";
 import { getProject } from "../../lib/projects";
-
-interface OpenFile {
-  id: string;
-  name: string;
-  path: string;
-  language: string;
-  content: string;
-  savedContent: string;
-}
-
-interface PersistedIdeState {
-  openPaths: string[];
-  activePath: string;
-  drafts: Record<string, string>;
-  stdin?: string;
-  layout: {
-    showSidebar: boolean;
-    showAIPanel: boolean;
-    showTerminal: boolean;
-  };
-}
-
-type SaveStatus = "saved" | "saving" | "unsaved";
-type Role = "OWNER" | "WRITER" | "READER";
-
-const EDITOR_SETTINGS_STORAGE_KEY = "codeit:editor-dashboard-settings";
+import { useCollabSession } from "../ide/hooks/useCollabSession";
+import { useProjectLoad } from "../ide/hooks/useProjectLoad";
+import { useFileSave } from "../ide/hooks/useFileSave";
+import { useProjectNodes } from "../ide/hooks/useProjectNodes";
+import { useCodeExecution } from "../ide/hooks/useCodeExecution";
+import { useAIContext } from "../ide/hooks/useAIContext";
+import { useIdeShortcuts } from "../ide/hooks/useIdeShortcuts";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../components/ui/resizable";
 
 function loadEditorDashboardSettings(): EditorSettings {
   if (typeof window === "undefined") {
@@ -101,233 +98,118 @@ function loadEditorDashboardSettings(): EditorSettings {
   }
 }
 
-function formatContentOnSave(content: string): string {
-  return content
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .map((line) => line.replace(/[\t ]+$/g, ""))
-    .join("\n");
-}
-
-const LANGUAGE_DISPLAY: Record<string, string> = {
-  javascript: "JavaScript",
-  typescript: "TypeScript",
-  python: "Python",
-  java: "Java",
-  c: "C",
-  cpp: "C++",
-  html: "HTML",
-  css: "CSS",
-  json: "JSON",
-  markdown: "Markdown",
-  plaintext: "Plain Text",
-};
-
-function getLanguageFromPath(path: string): string {
-  const p = path.toLowerCase();
-
-  if (p.endsWith(".tsx") || p.endsWith(".ts")) return "typescript";
-  if (p.endsWith(".jsx") || p.endsWith(".js")) return "javascript";
-  if (p.endsWith(".py")) return "python";
-  if (p.endsWith(".java")) return "java";
-  if (p.endsWith(".cpp") || p.endsWith(".cc") || p.endsWith(".cxx")) return "cpp";
-  if (p.endsWith(".c")) return "c";
-  if (p.endsWith(".html")) return "html";
-  if (p.endsWith(".css")) return "css";
-  if (p.endsWith(".json")) return "json";
-  if (p.endsWith(".md")) return "markdown";
-
-  return "plaintext";
-}
-
-function getExecutionLanguage(path: string): ExecutionLanguage | null {
-  const p = path.toLowerCase();
-
-  if (p.endsWith(".cpp") || p.endsWith(".cc") || p.endsWith(".cxx")) return "cpp";
-  if (p.endsWith(".c")) return "c";
-  if (p.endsWith(".java")) return "java";
-  if (p.endsWith(".js") || p.endsWith(".jsx")) return "javascript";
-  if (p.endsWith(".py")) return "python";
-
-  return null;
-}
-
-function mapProjectFileToOpenFile(file: ProjectFile): OpenFile {
-  const parts = file.path.split("/");
-  return {
-    id: file.path,
-    name: parts[parts.length - 1] || file.path,
-    path: file.path,
-    language: getLanguageFromPath(file.path),
-    content: file.content,
-    savedContent: file.content,
-  };
-}
-
-function mapExecutionResultToTerminal(result: Awaited<ReturnType<typeof executeProjectCode>>): ExecutionResult {
-  const statusText = result.status.description.toLowerCase();
-  const output = [result.stdout].filter(Boolean).join("\n");
-  const errorMessage = [result.compileOutput, result.stderr, result.message].filter(Boolean).join("\n");
-
-  const status: ExecutionResult["status"] = statusText.includes("accepted")
-    ? "accepted"
-    : statusText.includes("compile")
-      ? "compilation_error"
-      : "runtime_error";
-
-  return {
-    output,
-    errorMessage,
-    status,
-    executionTime: result.time ? Math.max(0, Math.round(Number(result.time) * 1000)) : 0,
-    exitCode: typeof result.exitCode === "number" ? result.exitCode : status === "accepted" ? 0 : 1,
-  };
-}
-
-function getIdeStorageKey(projectId: string): string {
-  return `codeit:ide:${projectId}`;
-}
-
-function loadPersistedIdeState(projectId: string): PersistedIdeState | null {
-  if (typeof window === "undefined") return null;
-
-  try {
-    const raw = window.localStorage.getItem(getIdeStorageKey(projectId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<PersistedIdeState>;
-
-    if (!parsed || typeof parsed !== "object") return null;
-
-    return {
-      openPaths: Array.isArray(parsed.openPaths) ? parsed.openPaths.filter((item): item is string => typeof item === "string") : [],
-      activePath: typeof parsed.activePath === "string" ? parsed.activePath : "",
-      drafts: parsed.drafts && typeof parsed.drafts === "object" ? parsed.drafts as Record<string, string> : {},
-      stdin: typeof parsed.stdin === "string" ? parsed.stdin : "",
-      layout: {
-        showSidebar: parsed.layout?.showSidebar ?? true,
-        showAIPanel: parsed.layout?.showAIPanel ?? true,
-        showTerminal: parsed.layout?.showTerminal ?? true,
-      },
-    };
-  } catch {
-    return null;
-  }
-}
-
-function getExecutionErrorStatus(message: string): ExecutionResult["status"] {
-  if (/judge0|rapidapi|submission|quota|sandbox|compile service/i.test(message)) {
-    return "api_error";
-  }
-
-  if (/failed to fetch|network|econn|timeout|http 5|gateway|unavailable|internal server/i.test(message)) {
-    return "backend_failure";
-  }
-
-  return "backend_failure";
-}
-
 export default function IDEPage() {
-  const navigate = useNavigate();
   const { projectId } = useParams();
 
-  const [projectName, setProjectName] = useState("Project");
-  const [role, setRole] = useState<Role>("READER");
-  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
-
-  const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
-  const [activeFileId, setActiveFileId] = useState<string>("");
+  const {
+    openFiles,
+    activeFileId,
+    activeFile,
+    tabFiles,
+    setActiveFileId,
+    openFile,
+    closeFile,
+    updateActiveContent,
+    markSaved,
+    initializeFiles,
+    renameFile,
+    requestCloseFile,
+    clearCloseConfirm,
+    closeConfirm,
+  } = useOpenFiles();
   const [showSidebar, setShowSidebar] = useState(true);
   const [showAIPanel, setShowAIPanel] = useState(true);
   const [showTerminal, setShowTerminal] = useState(true);
-  const [isRunning, setIsRunning] = useState(false);
-  const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null);
   const [stdin, setStdin] = useState("");
   const [showEditorSettings, setShowEditorSettings] = useState(false);
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(() => loadEditorDashboardSettings());
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
-  const [closeConfirm, setCloseConfirm] = useState<{ fileId: string; name: string } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [fileBusy, setFileBusy] = useState(false);
-  const [fileError, setFileError] = useState("");
-  const hasHydratedProjectStateRef = useRef(false);
+  const {
+    projectName,
+    role,
+    nodes,
+    setNodes,
+    loading,
+    fileError,
+    setFileError,
+    hasHydratedProjectStateRef,
+    panelSizes,
+    setPanelSizes,
+  } = useProjectLoad(
+    projectId,
+    { openFiles, activeFileId, activeFile, tabFiles, setActiveFileId, openFile, closeFile, updateActiveContent, markSaved, initializeFiles, renameFile, requestCloseFile, clearCloseConfirm, closeConfirm },
+    setShowSidebar,
+    setShowAIPanel,
+    setShowTerminal,
+    setStdin,
+  );
 
   const readOnly = role === "READER";
 
-  const activeFile = openFiles.find((f) => f.id === activeFileId) ?? null;
+  const { isRunning, executionResult, setExecutionResult, handleRun } = useCodeExecution(
+    projectId,
+    activeFile,
+    stdin,
+    setShowTerminal,
+  );
 
-  const loadProject = useCallback(async () => {
-    if (!projectId) {
-      navigate("/app", { replace: true });
-      return;
-    }
+  const { fileBusy, handleCreateNode, handleRenameNode, handleMoveNode, handleDeleteNode } = useProjectNodes(
+    projectId,
+    readOnly,
+    nodes,
+    setNodes,
+    { openFiles, activeFileId, activeFile, tabFiles, setActiveFileId, openFile, closeFile, updateActiveContent, markSaved, initializeFiles, renameFile, requestCloseFile, clearCloseConfirm, closeConfirm },
+    setFileError,
+  );
 
-    setLoading(true);
-    setFileError("");
-    hasHydratedProjectStateRef.current = false;
+  const { saveStatus, handleSave } = useFileSave(
+    projectId,
+    readOnly,
+    editorSettings.formatOnSave,
+    editorSettings.autoSave,
+    editorSettings.autoSaveDelay,
+    { openFiles, activeFileId, activeFile, tabFiles, setActiveFileId, openFile, closeFile, updateActiveContent, markSaved, initializeFiles, renameFile, requestCloseFile, clearCloseConfirm, closeConfirm },
+    setNodes,
+    setFileError,
+  );
 
-    try {
-      const [projectDetail, files] = await Promise.all([getProject(projectId), listFiles(projectId)]);
-      const persisted = loadPersistedIdeState(projectId);
-
-      setProjectName(projectDetail.project.name);
-      setRole(projectDetail.role);
-      setProjectFiles(files);
-
-      if (persisted) {
-        setShowSidebar(persisted.layout.showSidebar);
-        setShowAIPanel(persisted.layout.showAIPanel);
-        setShowTerminal(persisted.layout.showTerminal);
-        setStdin(persisted.stdin ?? "");
-      }
-
-      const filesByPath = new Map(files.map((file) => [file.path, file] as const));
-      const preferredPaths = persisted?.openPaths.filter((path) => filesByPath.has(path)) ?? [];
-      const initialPaths = preferredPaths.length > 0
-        ? preferredPaths
-        : files[0]
-          ? [files[0].path]
-          : [];
-
-      const restoredOpenFiles = initialPaths
-        .map((path) => filesByPath.get(path))
-        .filter((item): item is ProjectFile => !!item)
-        .map((file) => {
-          const backendMapped = mapProjectFileToOpenFile(file);
-          const draft = persisted?.drafts?.[file.path];
-
-          return {
-            ...backendMapped,
-            content: typeof draft === "string" ? draft : backendMapped.content,
-          };
-        });
-
-      const preferredActive = persisted?.activePath;
-      const hasPreferredActive = !!preferredActive && restoredOpenFiles.some((file) => file.id === preferredActive);
-
-      setOpenFiles(restoredOpenFiles);
-      setActiveFileId(hasPreferredActive
-        ? preferredActive!
-        : restoredOpenFiles[0]?.id ?? "");
-
-      hasHydratedProjectStateRef.current = true;
-    } catch (err) {
-      setFileError(err instanceof Error ? err.message : "Failed to load project");
-    } finally {
-      setLoading(false);
-    }
-  }, [navigate, projectId]);
-
-  useEffect(() => {
-    void loadProject();
-  }, [loadProject]);
-
-  useEffect(() => {
-    if (!activeFile) {
-      setSaveStatus("saved");
-      return;
-    }
-    setSaveStatus(activeFile.content !== activeFile.savedContent ? "unsaved" : "saved");
-  }, [activeFile?.content, activeFile?.savedContent]);
+  const { aiContext, aiModels, aiDefaultModel } = useAIContext(
+    projectName,
+    activeFile,
+    openFiles,
+    nodes,
+    executionResult,
+    loading,
+    projectId,
+  );
+  const onSaveShortcut = useCallback(() => {
+    void handleSave();
+  }, [handleSave]);
+  const onRunShortcut = useCallback(() => {
+    void handleRun();
+  }, [handleRun]);
+  const onToggleSidebarShortcut = useCallback(() => setShowSidebar((v) => !v), []);
+  const onToggleTerminalShortcut = useCallback(() => setShowTerminal((v) => !v), []);
+  const onOpenSettingsShortcut = useCallback(() => setShowEditorSettings(true), []);
+  const handleHorizontalLayout = useCallback((sizes: number[]) => {
+    let index = 0;
+    setPanelSizes((current) => {
+      const next = { ...current };
+      if (showSidebar) next.sidebar = sizes[index++];
+      next.editor = sizes[index++];
+      if (showAIPanel) next.aiPanel = sizes[index];
+      return next;
+    });
+  }, [showAIPanel, showSidebar]);
+  const handleVerticalLayout = useCallback((sizes: number[]) => {
+    if (!showTerminal || sizes.length < 2) return;
+    setPanelSizes((current) => ({ ...current, editor: sizes[0], terminal: sizes[1] }));
+  }, [showTerminal]);
+  const {
+    collabStatus,
+    collaborators,
+    collabTextRef,
+    collabReadyRef,
+  } = useCollabSession(projectId, activeFileId, loading, updateActiveContent);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -339,14 +221,14 @@ export default function IDEPage() {
 
     const drafts = openFiles.reduce<Record<string, string>>((accumulator, file) => {
       if (file.content !== file.savedContent) {
-        accumulator[file.path] = file.content;
+        accumulator[file.id] = file.content;
       }
       return accumulator;
     }, {});
 
     const state: PersistedIdeState = {
-      openPaths: openFiles.map((file) => file.path),
-      activePath: activeFileId,
+      openIds: openFiles.map((file) => file.id),
+      activeId: activeFileId,
       drafts,
       stdin,
       layout: {
@@ -354,332 +236,34 @@ export default function IDEPage() {
         showAIPanel,
         showTerminal,
       },
+      panelSizes,
     };
 
     window.localStorage.setItem(getIdeStorageKey(projectId), JSON.stringify(state));
-  }, [activeFileId, openFiles, projectId, showAIPanel, showSidebar, showTerminal, stdin]);
+  }, [activeFileId, openFiles, panelSizes, projectId, showAIPanel, showSidebar, showTerminal, stdin]);
 
   const handleCodeChange = useCallback((value: string) => {
-    setOpenFiles((prev) => prev.map((f) => (f.id === activeFileId ? { ...f, content: value } : f)));
-  }, [activeFileId]);
-
-  const handleFileOpen = useCallback((file: { name: string; path: string; language?: string; content?: string }) => {
-    setOpenFiles((prev) => {
-      const existing = prev.find((item) => item.path === file.path);
-      if (existing) {
-        setActiveFileId(existing.id);
-        return prev;
-      }
-
-      const nextFile: OpenFile = {
-        id: file.path,
-        name: file.name,
-        path: file.path,
-        language: file.language ?? getLanguageFromPath(file.path),
-        content: file.content ?? "",
-        savedContent: file.content ?? "",
-      };
-
-      setActiveFileId(nextFile.id);
-      return [...prev, nextFile];
-    });
-  }, []);
-
-  const doCloseFile = useCallback((fileId: string) => {
-    setOpenFiles((prev) => {
-      const remaining = prev.filter((file) => file.id !== fileId);
-      setActiveFileId((currentActiveId) => {
-        if (currentActiveId !== fileId) return currentActiveId;
-        return remaining[remaining.length - 1]?.id ?? "";
-      });
-      return remaining;
-    });
-    setCloseConfirm(null);
-  }, []);
-
-  const requestCloseFile = useCallback((fileId: string) => {
-    const file = openFiles.find((f) => f.id === fileId);
-    if (!file) return;
-
-    if (file.content !== file.savedContent) {
-      setCloseConfirm({ fileId, name: file.name });
+    const text = collabTextRef.current;
+    if (!text || !collabReadyRef.current) {
+      updateActiveContent(value);
       return;
     }
 
-    doCloseFile(fileId);
-  }, [doCloseFile, openFiles]);
+    replaceTextContent(text, value);
+  }, [updateActiveContent]);
 
-  const handleSave = useCallback(async (fileId?: string): Promise<boolean> => {
-    if (!projectId || readOnly) return false;
-
-    const targetId = fileId ?? activeFileId;
-    const target = openFiles.find((f) => f.id === targetId);
-    if (!target || target.content === target.savedContent) return true;
-
-    const contentToSave = editorSettings.formatOnSave
-      ? formatContentOnSave(target.content)
-      : target.content;
-
-    setSaveStatus("saving");
-    setFileError("");
-
-    try {
-      await saveFile(projectId, target.path, contentToSave);
-
-      setOpenFiles((prev) => prev.map((f) => (
-        f.id === targetId ? { ...f, content: contentToSave, savedContent: contentToSave } : f
-      )));
-
-      setProjectFiles((prev) => prev.map((file) => (
-        file.path === target.path ? { ...file, content: contentToSave, updatedAt: new Date().toISOString() } : file
-      )));
-
-      setSaveStatus("saved");
-      return true;
-    } catch (err) {
-      setSaveStatus("unsaved");
-      setFileError(err instanceof Error ? err.message : "Failed to save file");
-      return false;
-    }
-  }, [activeFileId, editorSettings.formatOnSave, openFiles, projectId, readOnly]);
-
-  useEffect(() => {
-    if (!editorSettings.autoSave || readOnly || !activeFile || saveStatus === "saving") return;
-    if (activeFile.content === activeFile.savedContent) return;
-
-    const timeout = window.setTimeout(() => {
-      void handleSave(activeFile.id);
-    }, editorSettings.autoSaveDelay);
-
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [
-    activeFile,
-    editorSettings.autoSaveDelay,
-    editorSettings.autoSave,
-    handleSave,
-    readOnly,
-    saveStatus,
-  ]);
-
-  const handleCreateFile = useCallback(async (path: string) => {
-    if (!projectId || readOnly) return;
-
-    const trimmedPath = path.trim().replace(/^\/+/, "");
-    if (!trimmedPath) {
-      setFileError("File path is required");
-      return;
-    }
-
-    if (projectFiles.some((file) => file.path === trimmedPath)) {
-      setFileError("File path already exists");
-      return;
-    }
-
-    setFileBusy(true);
-    setFileError("");
-
-    try {
-      const created = await createFile(projectId, trimmedPath, "");
-
-      const createdFile: ProjectFile = {
-        id: created.id,
-        path: created.path,
-        content: created.content,
-        updatedAt: new Date().toISOString(),
-      };
-
-      setProjectFiles((prev) => [...prev, createdFile]);
-
-      handleFileOpen({
-        name: created.path.split("/").pop() || created.path,
-        path: created.path,
-        language: getLanguageFromPath(created.path),
-        content: created.content,
-      });
-    } catch (err) {
-      setFileError(err instanceof Error ? err.message : "Failed to create file");
-    } finally {
-      setFileBusy(false);
-    }
-  }, [handleFileOpen, projectFiles, projectId, readOnly]);
-
-  const handleRenameFile = useCallback(async (oldPath: string, newPath: string) => {
-    if (!projectId || readOnly) return;
-
-    const trimmedPath = newPath.trim().replace(/^\/+/, "");
-    if (!trimmedPath || trimmedPath === oldPath) return;
-
-    if (projectFiles.some((file) => file.path === trimmedPath && file.path !== oldPath)) {
-      setFileError("File path already exists");
-      return;
-    }
-
-    setFileBusy(true);
-    setFileError("");
-
-    try {
-      await renameFile(projectId, oldPath, trimmedPath);
-
-      setProjectFiles((prev) => prev.map((file) => (
-        file.path === oldPath
-          ? { ...file, path: trimmedPath, updatedAt: new Date().toISOString() }
-          : file
-      )));
-
-      setOpenFiles((prev) => prev.map((f) => {
-        if (f.path !== oldPath) return f;
-
-        const name = trimmedPath.split("/").pop() || trimmedPath;
-        return {
-          ...f,
-          id: trimmedPath,
-          name,
-          path: trimmedPath,
-          language: getLanguageFromPath(trimmedPath),
-        };
-      }));
-
-      if (activeFileId === oldPath) {
-        setActiveFileId(trimmedPath);
-      }
-    } catch (err) {
-      setFileError(err instanceof Error ? err.message : "Failed to rename file");
-    } finally {
-      setFileBusy(false);
-    }
-  }, [activeFileId, projectFiles, projectId, readOnly]);
-
-  const handleDeleteFile = useCallback(async (path: string) => {
-    if (!projectId || readOnly) return;
-
-    setFileBusy(true);
-    setFileError("");
-
-    try {
-      await deleteFile(projectId, path);
-
-      setProjectFiles((prev) => prev.filter((file) => file.path !== path));
-
-      const target = openFiles.find((f) => f.path === path);
-      if (target) {
-        doCloseFile(target.id);
-      }
-    } catch (err) {
-      setFileError(err instanceof Error ? err.message : "Failed to delete file");
-    } finally {
-      setFileBusy(false);
-    }
-  }, [doCloseFile, openFiles, projectId, readOnly]);
-
-  const handleRun = useCallback(async () => {
-    if (!projectId || !activeFile || isRunning) return;
-
-    if (!activeFile.content.trim()) {
-      setExecutionResult({
-        output: "",
-        exitCode: 1,
-        executionTime: 0,
-        status: "empty_file",
-        errorMessage: "Cannot execute an empty file.\nPlease write some code first.",
-      });
-      setShowTerminal(true);
-      return;
-    }
-
-    const executionLanguage = getExecutionLanguage(activeFile.path);
-    if (!executionLanguage) {
-      setExecutionResult({
-        output: "",
-        exitCode: 1,
-        executionTime: 0,
-        status: "unsupported_language",
-        errorMessage: "This file type is not supported for execution. Use .js, .py, .java, .c, or .cpp files.",
-      });
-      setShowTerminal(true);
-      return;
-    }
-
-    setIsRunning(true);
-    setExecutionResult(null);
-    setShowTerminal(true);
-
-    try {
-      const result = await executeProjectCode(projectId, {
-        sourceCode: activeFile.content,
-        language: executionLanguage,
-        filePath: activeFile.path,
-        stdin: stdin || undefined,
-      });
-
-      setExecutionResult(mapExecutionResultToTerminal(result));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Execution failed";
-      const status = getExecutionErrorStatus(message);
-
-      setExecutionResult({
-        output: "",
-        exitCode: -1,
-        executionTime: 0,
-        status,
-        errorMessage: message,
-      });
-    } finally {
-      setIsRunning(false);
-    }
-  }, [activeFile, isRunning, projectId, stdin]);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const ctrl = e.ctrlKey || e.metaKey;
-      const alt = e.altKey;
-
-      if (ctrl && e.key === "s") {
-        e.preventDefault();
-        void handleSave();
-      }
-      if (ctrl && e.key === "Enter") {
-        e.preventDefault();
-        if (!isRunning) void handleRun();
-      }
-      if (ctrl && e.key === "b") {
-        e.preventDefault();
-        setShowSidebar((v) => !v);
-      }
-      if (ctrl && e.key === "j") {
-        e.preventDefault();
-        setShowTerminal((v) => !v);
-      }
-      if (ctrl && e.key === ",") {
-        e.preventDefault();
-        setShowEditorSettings(true);
-      }
-
-      if (alt && e.key === "w") {
-        e.preventDefault();
-        if (activeFileId) requestCloseFile(activeFileId);
-      }
-
-      if (alt && e.key === "Tab") {
-        e.preventDefault();
-        if (openFiles.length > 1) {
-          const idx = openFiles.findIndex((f) => f.id === activeFileId);
-          setActiveFileId(openFiles[(idx + 1) % openFiles.length].id);
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [activeFileId, handleRun, handleSave, isRunning, openFiles, requestCloseFile]);
-
-  const tabFiles = useMemo(() => {
-    return openFiles.map((f) => ({
-      ...f,
-      unsaved: f.content !== f.savedContent,
-    }));
-  }, [openFiles]);
+  useIdeShortcuts({
+    activeFileId,
+    openFiles,
+    isRunning,
+    onSave: onSaveShortcut,
+    onRun: onRunShortcut,
+    onToggleSidebar: onToggleSidebarShortcut,
+    onToggleTerminal: onToggleTerminalShortcut,
+    onOpenSettings: onOpenSettingsShortcut,
+    onCloseFile: requestCloseFile,
+    onSetActiveFile: setActiveFileId,
+  });
 
   const langLabel = activeFile ? (LANGUAGE_DISPLAY[activeFile.language] ?? activeFile.language) : "";
   const initials = useMemo(() => (role === "OWNER" ? "OW" : role === "WRITER" ? "ED" : "RD"), [role]);
@@ -707,7 +291,7 @@ export default function IDEPage() {
                 size="sm"
                 variant="ghost"
                 className="text-gray-400 hover:text-white"
-                onClick={() => setCloseConfirm(null)}
+                onClick={clearCloseConfirm}
               >
                 Cancel
               </Button>
@@ -719,7 +303,7 @@ export default function IDEPage() {
                   const targetId = closeConfirm.fileId;
                   const saved = await handleSave(targetId);
                   if (saved) {
-                    doCloseFile(targetId);
+                    closeFile(targetId);
                   }
                 }}
               >
@@ -728,7 +312,7 @@ export default function IDEPage() {
               <Button
                 size="sm"
                 className="bg-red-600 hover:bg-red-700 text-white"
-                onClick={() => doCloseFile(closeConfirm.fileId)}
+                onClick={() => closeFile(closeConfirm.fileId)}
               >
                 Discard & Close
               </Button>
@@ -745,100 +329,25 @@ export default function IDEPage() {
         />
       )}
 
-      <div className="h-11 bg-[#252526] border-b border-[#3e3e42] flex items-center justify-between px-3 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <Button
-            size="icon"
-            variant="ghost"
-            className="w-7 h-7 text-gray-400 hover:text-white hover:bg-[#2a2d2e]"
-            onClick={() => setShowSidebar((v) => !v)}
-            title="Toggle sidebar (Ctrl+B)"
-          >
-            {showSidebar ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
-          </Button>
-
-          <span className="text-sm text-gray-200">{projectName}</span>
-          <span className="text-xs text-gray-600">·</span>
-          <span className="text-xs text-gray-500">{langLabel}</span>
-
-          {activeFile && (
-            <>
-              <span className="text-xs text-gray-600">·</span>
-              {saveStatus === "saving" && (
-                <span className="flex items-center gap-1 text-xs text-yellow-400">
-                  <Loader2 className="w-3 h-3 animate-spin" /> Saving…
-                </span>
-              )}
-              {saveStatus === "saved" && (
-                <span className="flex items-center gap-1 text-xs text-green-400">
-                  <CheckCheck className="w-3 h-3" /> Saved
-                </span>
-              )}
-              {saveStatus === "unsaved" && (
-                <span className="flex items-center gap-1 text-xs text-orange-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-orange-400" /> Unsaved
-                </span>
-              )}
-            </>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2.5 text-xs text-gray-300 hover:text-white hover:bg-[#2a2d2e] disabled:opacity-40"
-            onClick={() => void handleSave()}
-            disabled={readOnly || saveStatus === "saved" || saveStatus === "saving"}
-            title="Save (Ctrl+S)"
-          >
-            <Save className="w-3.5 h-3.5 mr-1.5" />
-            Save
-          </Button>
-
-          <Button
-            size="sm"
-            className={`h-7 px-3 text-xs text-white transition-all ${
-              isRunning
-                ? "bg-green-700 cursor-not-allowed"
-                : "bg-green-600 hover:bg-green-500"
-            }`}
-            onClick={() => void handleRun()}
-            disabled={isRunning}
-            title="Run (Ctrl+Enter)"
-          >
-            {isRunning ? (
-              <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Running…</>
-            ) : (
-              <><Play className="w-3.5 h-3.5 mr-1.5" />Run</>
-            )}
-          </Button>
-
-          <Button
-            size="icon"
-            variant="ghost"
-            className={`w-7 h-7 hover:bg-[#2a2d2e] ${showAIPanel ? "text-indigo-400" : "text-gray-400 hover:text-white"}`}
-            onClick={() => setShowAIPanel((v) => !v)}
-            title="Toggle AI assistant"
-          >
-            <Bot className="w-4 h-4" />
-          </Button>
-
-          <Button
-            size="icon"
-            variant="ghost"
-            className={`w-7 h-7 hover:bg-[#2a2d2e] ${showEditorSettings ? "text-indigo-400" : "text-gray-400 hover:text-white"}`}
-            onClick={() => setShowEditorSettings(true)}
-            title="Editor settings (Ctrl+,)"
-          >
-            <Settings className="w-4 h-4" />
-          </Button>
-
-          <Avatar className="w-7 h-7 ml-1">
-            <AvatarFallback className="bg-indigo-600 text-white text-xs">{initials}</AvatarFallback>
-          </Avatar>
-        </div>
-      </div>
+      <IDEHeader
+        projectName={projectName}
+        language={langLabel}
+        collabStatus={collabStatus}
+        collaboratorCount={collaborators.length}
+        saveStatus={saveStatus}
+        hasActiveFile={!!activeFile}
+        readOnly={readOnly}
+        isRunning={isRunning}
+        showSidebar={showSidebar}
+        showAIPanel={showAIPanel}
+        showEditorSettings={showEditorSettings}
+        initials={initials}
+        onToggleSidebar={() => setShowSidebar((value) => !value)}
+        onSave={() => void handleSave()}
+        onRun={() => void handleRun()}
+        onToggleAIPanel={() => setShowAIPanel((value) => !value)}
+        onOpenEditorSettings={() => setShowEditorSettings(true)}
+      />
 
       {fileError && (
         <div className="px-3 py-2 bg-red-950/20 border-b border-red-800/50 text-red-300 text-xs">
@@ -846,23 +355,35 @@ export default function IDEPage() {
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden">
+      <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden" onLayout={handleHorizontalLayout}>
         {showSidebar && (
-          <div className="w-72 bg-[#252526] border-r border-[#3e3e42] flex flex-col flex-shrink-0">
+          <ResizablePanel
+            defaultSize={panelSizes.sidebar}
+            minSize={15}
+            maxSize={40}
+            className="bg-[#252526] border-r border-[#3e3e42]"
+          >
             <FileExplorer
-              files={projectFiles}
-              activePath={activeFile?.path}
+              nodes={nodes}
+              activeNodeId={activeFile?.id}
               readOnly={readOnly}
               busy={fileBusy || loading}
-              onFileOpen={handleFileOpen}
-              onCreateFile={handleCreateFile}
-              onRenameFile={handleRenameFile}
-              onDeleteFile={handleDeleteFile}
+              onFileOpen={openFile}
+              onCreateNode={handleCreateNode}
+              onRenameNode={handleRenameNode}
+              onDeleteNode={handleDeleteNode}
+              onMoveNode={handleMoveNode}
             />
-          </div>
+          </ResizablePanel>
         )}
+        {showSidebar && <ResizableHandle className="bg-[#3e3e42] hover:bg-indigo-500/70" />}
 
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <ResizablePanel
+          defaultSize={panelSizes.editor}
+          minSize={30}
+          className="min-w-0"
+        >
+          <ResizablePanelGroup direction="vertical" onLayout={handleVerticalLayout}>
           <EditorTabs
             files={tabFiles}
             activeFileId={activeFileId}
@@ -870,7 +391,8 @@ export default function IDEPage() {
             onTabClose={requestCloseFile}
           />
 
-          <div className="flex-1 overflow-hidden">
+          <ResizablePanel defaultSize={100 - panelSizes.terminal} minSize={40}>
+          <div className="h-full overflow-hidden">
             {loading ? (
               <div className="flex items-center justify-center h-full text-gray-500 text-sm">
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Loading project...
@@ -881,7 +403,7 @@ export default function IDEPage() {
                 language={activeFile.language}
                 onChange={handleCodeChange}
                 settings={editorSettings}
-                readOnly={readOnly}
+                readOnly={readOnly || collabStatus === "connecting" || collabStatus === "syncing"}
               />
             ) : (
               <div className="flex items-center justify-center h-full text-gray-600">
@@ -899,17 +421,22 @@ export default function IDEPage() {
               </div>
             )}
           </div>
+          </ResizablePanel>
 
           {showTerminal && (
-            <div className="h-60 border-t border-[#3e3e42] flex-shrink-0">
+            <>
+            <ResizableHandle className="bg-[#3e3e42] hover:bg-indigo-500/70" />
+            <ResizablePanel defaultSize={panelSizes.terminal} minSize={15} maxSize={60}>
               <TerminalPanel
                 onClose={() => setShowTerminal(false)}
                 isRunning={isRunning}
                 executionResult={executionResult}
+                onClearOutput={() => setExecutionResult(null)}
                 stdin={stdin}
                 onStdinChange={setStdin}
               />
-            </div>
+            </ResizablePanel>
+            </>
           )}
 
           {!showTerminal && (
@@ -930,14 +457,21 @@ export default function IDEPage() {
               </button>
             </div>
           )}
-        </div>
+          </ResizablePanelGroup>
+        </ResizablePanel>
+        {showAIPanel && <ResizableHandle className="bg-[#3e3e42] hover:bg-indigo-500/70" />}
 
         {showAIPanel && (
-          <div className="w-88 bg-[#252526] border-l border-[#3e3e42] flex-shrink-0" style={{ width: "22rem" }}>
-            <AIChatPanel onClose={() => setShowAIPanel(false)} />
-          </div>
+          <ResizablePanel defaultSize={panelSizes.aiPanel} minSize={15} maxSize={80} className="bg-[#252526] border-l border-[#3e3e42]">
+            <AIChatPanel
+              onClose={() => setShowAIPanel(false)}
+              context={aiContext}
+              models={aiModels}
+              defaultModel={aiDefaultModel}
+            />
+          </ResizablePanel>
         )}
-      </div>
+      </ResizablePanelGroup>
     </div>
   );
 }

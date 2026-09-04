@@ -134,27 +134,6 @@ export default function LoginPage() {
             {error && <p className="text-sm text-red-400">{error}</p>}
           </form>
 
-
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/10"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-[#1e1e1e] text-gray-400">Or continue with</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Button variant="outline" className="border-white/10 text-white hover:bg-white/5">
-              <Github className="w-5 h-5 mr-2" />
-              GitHub
-            </Button>
-            <Button variant="outline" className="border-white/10 text-white hover:bg-white/5">
-              <Mail className="w-5 h-5 mr-2" />
-              Google
-            </Button>
-          </div>
-
           <div className="mt-6 text-center text-sm text-gray-400">
             Don't have an account?{" "}
             <Link to="/signup" className="text-indigo-400 hover:text-indigo-300 font-medium">

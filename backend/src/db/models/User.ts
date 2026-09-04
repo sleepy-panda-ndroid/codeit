@@ -21,7 +21,6 @@ const UserSchema = new Schema(
     name: { type: String, trim: true, default: "" },
     bio: { type: String, trim: true, default: "" },
     avatarDataUrl: { type: String, default: "" },
-    twoFactorEnabled: { type: Boolean, default: false },
     preferences: { type: UserPreferencesSchema, default: () => ({}) },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },

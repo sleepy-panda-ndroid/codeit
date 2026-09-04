@@ -1,6 +1,7 @@
 import mongoose, { InferSchemaType, Schema } from "mongoose";
 
 export const NOTIFICATION_TYPES = ["PROJECT_INVITE"] as const;
+export const NOTIFICATION_STATUSES = ["PENDING", "ACCEPTED", "DECLINED"] as const;
 
 const NotificationSchema = new Schema(
   {
@@ -14,6 +15,16 @@ const NotificationSchema = new Schema(
       type: String,
       enum: NOTIFICATION_TYPES,
       required: true,
+    },
+    status: {
+      type: String,
+      enum: NOTIFICATION_STATUSES,
+      default: "PENDING",
+      index: true,
+    },
+    resolvedAt: {
+      type: Date,
+      default: null,
     },
     projectId: {
       type: Schema.Types.ObjectId,

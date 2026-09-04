@@ -14,6 +14,8 @@ export type NotificationItem = {
     email: string;
   };
   createdAt: string;
+  status: "PENDING" | "ACCEPTED" | "DECLINED";
+  resolvedAt: string | null;
 };
 
 export async function listNotifications() {

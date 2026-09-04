@@ -1,10 +1,11 @@
 import { useRef, useEffect } from "react";
 import { X } from "lucide-react";
 
+
 export interface EditorFile {
   id: string;
   name: string;
-  path: string;
+  path?: string;
   unsaved?: boolean;
 }
 
@@ -37,7 +38,7 @@ export default function EditorTabs({ files, activeFileId, onTabClick, onTabClose
                 : "bg-[#252526] text-gray-400 hover:text-gray-200 hover:bg-[#2a2d2e] border-t-2 border-t-transparent"
             }`}
             onClick={() => onTabClick(file.id)}
-            title={file.path}
+            title={file.name}
           >
             {file.unsaved && (
               <span className="text-orange-400 text-xs leading-none flex-shrink-0" title="Unsaved changes">

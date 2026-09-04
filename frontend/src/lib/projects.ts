@@ -107,8 +107,24 @@ export async function removeProjectMember(projectId: string, userId: string) {
   });
 }
 
-
-
 export async function listProjectInvitations(projectId: string) {
   return apiFetch<ProjectInvitation[]>(`/projects/${projectId}/invitations`);
+}
+
+export type PublicProject = {
+  _id: string;
+  name: string;
+  description: string;
+  visibility: ProjectVisibility;
+  updatedAt: string;
+  owner: { id: string; name: string } | null;
+  myRole: ProjectRole | null;
+};
+
+export async function listPublicProjects() {
+  return apiFetch<PublicProject[]>("/projects/public");
+}
+
+export async function searchProjects(q: string) {
+  return apiFetch<Project[]>(`/projects/search?q=${encodeURIComponent(q)}`);
 }

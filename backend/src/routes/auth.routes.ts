@@ -4,6 +4,7 @@ import { z } from "zod";
 import { User } from "../db/models/User";
 import { hashPassword, verifyPassword, signJwt } from "../services/auth.service";
 import { authJwt } from "../middleware/authJwt";
+import { authLimiter } from "../middleware/rateLimit";
 
 export const authRouter = Router();
 
@@ -34,7 +35,6 @@ function toAuthUser(user: any) {
     email: user.email,
     bio: user.bio ?? "",
     avatarDataUrl: user.avatarDataUrl ?? "",
-    twoFactorEnabled: Boolean(user.twoFactorEnabled),
     preferences: normalizeUserPreferences(user.preferences),
   };
 }
@@ -46,7 +46,7 @@ const signupSchema = z.object({
 });
 
 // sign up
-authRouter.post("/signup", async (req, res) => {
+authRouter.post("/signup", authLimiter, async (req, res) => {
   const parsed = signupSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
 
@@ -75,7 +75,7 @@ const loginSchema = z.object({
 
 
 // login 
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", authLimiter, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
 
@@ -98,9 +98,14 @@ authRouter.post("/login", async (req, res) => {
 
 // get current user
 authRouter.get("/me", authJwt, async (req: any, res) => {
-  const user = await User.findById(req.userId).select("_id name email bio avatarDataUrl twoFactorEnabled preferences");
+  const user = await User.findById(req.userId).select("_id name email bio avatarDataUrl  preferences");
   if (!user) return res.status(404).json({ error: "User not found" });
   res.json(toAuthUser(user));
+});
+
+authRouter.post("/ws-ticket", authJwt, async (req: any, res) => {
+  const ticket = signJwt({ sub: String(req.userId), purpose: "collab-ws" }, { expiresIn: "30s" });
+  return res.json({ ticket });
 });
 
 const updateProfileSchema = z.object({
@@ -133,7 +138,7 @@ authRouter.put("/profile", authJwt, async (req: any, res) => {
   }
 
   const user = await User.findByIdAndUpdate(req.userId, updates, { new: true, runValidators: true })
-    .select("_id name email bio avatarDataUrl twoFactorEnabled preferences");
+    .select("_id name email bio avatarDataUrl preferences");
 
   if (!user) return res.status(404).json({ error: "User not found" });
 
@@ -152,7 +157,7 @@ authRouter.put("/avatar", authJwt, async (req: any, res) => {
     req.userId,
     { avatarDataUrl: parsed.data.avatarDataUrl },
     { new: true, runValidators: true }
-  ).select("_id name email bio avatarDataUrl twoFactorEnabled preferences");
+  ).select("_id name email bio avatarDataUrl preferences");
 
   if (!user) return res.status(404).json({ error: "User not found" });
 
@@ -187,24 +192,6 @@ authRouter.put("/preferences", authJwt, async (req: any, res) => {
   return res.json({ preferences: normalizeUserPreferences(user.preferences) });
 });
 
-const updateTwoFactorSchema = z.object({
-  enabled: z.boolean(),
-});
-
-authRouter.put("/2fa", authJwt, async (req: any, res) => {
-  const parsed = updateTwoFactorSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
-
-  const user = await User.findByIdAndUpdate(
-    req.userId,
-    { twoFactorEnabled: parsed.data.enabled },
-    { new: true, runValidators: true }
-  ).select("_id twoFactorEnabled");
-
-  if (!user) return res.status(404).json({ error: "User not found" });
-
-  return res.json({ twoFactorEnabled: Boolean(user.twoFactorEnabled) });
-});
 
 const updatePasswordSchema = z.object({
   currentPassword: z.string().min(1).max(128),
