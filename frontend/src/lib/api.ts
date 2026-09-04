@@ -2,7 +2,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000";
 
 function getToken() {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("token");
+  return sessionStorage.getItem("token") ?? localStorage.getItem("token");
 }
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {

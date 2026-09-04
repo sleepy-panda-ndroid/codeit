@@ -172,18 +172,6 @@ export default function DashboardLayout() {
           })}
         </nav>
 
-        <div className="p-4 border-t border-[#3e3e42]">
-          <div className="flex items-center gap-3 px-3 py-2">
-            <Avatar className="w-8 h-8">
-              <AvatarImage src={userAvatar} />
-              <AvatarFallback className="bg-indigo-600 text-white">{initials}</AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{userName}</p>
-              <p className="text-xs text-gray-400 truncate">{userEmail}</p>
-            </div>
-          </div>
-        </div>
       </aside>
 
       {/* Main Content */}

@@ -17,21 +17,28 @@ type AuthResponse = {
 
 export const AUTH_SESSION_CHANGED_EVENT = "auth:session-changed";
 
+const TOKEN_KEY = "token";
+const USER_KEY = "user";
+
 export function setAuthSession(token: string, user: AuthUser) {
-  localStorage.setItem("token", token);
-  localStorage.setItem("user", JSON.stringify(user));
+  sessionStorage.setItem(TOKEN_KEY, token);
+  sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
   window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
 }
 
 export function clearAuthSession() {
-  localStorage.removeItem("token");
-  localStorage.removeItem("user");
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(USER_KEY);
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
   window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
 }
 
 export function getStoredUser(): AuthUser | null {
   try {
-    const raw = localStorage.getItem("user");
+    const raw = sessionStorage.getItem(USER_KEY) ?? localStorage.getItem(USER_KEY);
     return raw ? (JSON.parse(raw) as AuthUser) : null;
   } catch {
     return null;
@@ -39,7 +46,7 @@ export function getStoredUser(): AuthUser | null {
 }
 
 export function getStoredToken(): string | null {
-  return localStorage.getItem("token");
+  return sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
 }
 
 export async function login(email: string, password: string) {
@@ -60,7 +67,7 @@ export async function getMe() {
   return apiFetch<AuthUser>("/auth/me");
 }
 
-export async function updateProfile(input: { name: string; email: string; bio?: string }) {
+export async function updateProfile(input: { name: string; email: string; bio?: string; avatarDataUrl?: string }) {
   return apiFetch<AuthUser>("/auth/profile", {
     method: "PUT",
     body: JSON.stringify(input),

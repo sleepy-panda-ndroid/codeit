@@ -17,6 +17,7 @@ interface TerminalPanelProps {
   executionResult?: ExecutionResult | null;
   stdin?: string;
   onStdinChange?: (value: string) => void;
+  onClearOutput?: () => void;
 }
 
 const STATUS_CONFIG: Record<
@@ -32,7 +33,7 @@ const STATUS_CONFIG: Record<
   backend_failure:    { label: "Backend Failure",     color: "text-red-400",   bg: "bg-red-400/10 border-red-400/30",      icon: Wifi },
 };
 
-export default function TerminalPanel({ onClose, isRunning, executionResult, stdin = "", onStdinChange }: TerminalPanelProps) {
+export default function TerminalPanel({ onClose, isRunning, executionResult, stdin = "", onStdinChange, onClearOutput }: TerminalPanelProps) {
   const [activeTab, setActiveTab] = useState("terminal");
   const [copied, setCopied] = useState(false);
   const [terminalLines] = useState([
@@ -202,6 +203,8 @@ export default function TerminalPanel({ onClose, isRunning, executionResult, std
               size="icon"
               variant="ghost"
               className="w-7 h-7 text-gray-400 hover:text-white hover:bg-[#2a2d2e]"
+              onClick={onClearOutput}
+              disabled={!executionResult && !isRunning}
               title="Clear output"
             >
               <Trash2 className="w-3 h-3" />
