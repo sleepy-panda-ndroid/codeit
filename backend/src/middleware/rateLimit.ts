@@ -8,12 +8,12 @@ export const authLimiter = rateLimit({
 
 export const executeLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 5,                      // per IP per minute
+  max: 15,                      // per IP per minute
   message: { error: "Execution rate limit reached, slow down" },
 });
 
 export const aiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 5,
+  max: 15,
   message: { error: "AI rate limit reached, slow down" },
 });

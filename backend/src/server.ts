@@ -17,7 +17,16 @@ import { handleCollabConnection } from "./ws/collabHandler";
 dotenv.config();
 const app = express();
 
-app.use(cors({ origin: true, credentials: true }));
+const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || "http://localhost:5173,http://localhost:4173,http://localhost:3000").split(",").map((value) => value.trim()).filter(Boolean);
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error("Origin not allowed by CORS"));
+  },
+  credentials: false,
+}));
 app.use(express.json({ limit: "5mb" }));
 
 app.use("/auth", authRouter);

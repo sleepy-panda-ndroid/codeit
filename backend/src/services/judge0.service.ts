@@ -62,33 +62,57 @@ function getJudge0Headers(): HeadersInit {
 
 async function judge0Fetch<T>(path: string, init?: RequestInit): Promise<T> {
   const baseUrl = getJudge0BaseUrl();
+  const headers = {
+    ...getJudge0Headers(),
+    ...(init?.headers || {}),
+  };
 
-  const res = await fetch(`${baseUrl}${path}`, {
-    ...init,
-    headers: {
-      ...getJudge0Headers(),
-      ...(init?.headers || {}),
-    },
-  });
+  let lastError: Error | null = null;
 
-  const text = await res.text();
-
-  if (!res.ok) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const data = JSON.parse(text);
-      const message =
-        data?.message || data?.error || text || `Judge0 request failed with HTTP ${res.status}`;
-      throw new Error(message);
-    } catch {
-      throw new Error(text || `Judge0 request failed with HTTP ${res.status}`);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12_000);
+
+      const res = await fetch(`${baseUrl}${path}`, {
+        ...init,
+        signal: controller.signal,
+        headers,
+      });
+
+      clearTimeout(timeout);
+      const text = await res.text();
+
+      if (!res.ok) {
+        try {
+          const data = JSON.parse(text);
+          const message =
+            data?.message || data?.error || text || `Judge0 request failed with HTTP ${res.status}`;
+          throw new Error(message);
+        } catch {
+          throw new Error(text || `Judge0 request failed with HTTP ${res.status}`);
+        }
+      }
+
+      try {
+        return JSON.parse(text) as T;
+      } catch {
+        throw new Error("Judge0 returned non-JSON response");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Judge0 request failed";
+      lastError = new Error(message);
+
+      if (attempt === 2) break;
+
+      const isTransient = /fetch failed|network|timeout|temporarily unavailable|429|5\d\d/i.test(message);
+      if (!isTransient) break;
+
+      await sleep(800 * (attempt + 1));
     }
   }
 
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new Error("Judge0 returned non-JSON response");
-  }
+  throw lastError ?? new Error("Judge0 execution service is temporarily unavailable");
 }
 
 export async function createSubmission(

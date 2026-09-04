@@ -13,6 +13,7 @@ dist/
 build/
 .next/
 out/
+*.tsbuildinfo
 
 # logs
 npm-debug.log*

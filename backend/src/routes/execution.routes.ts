@@ -44,6 +44,15 @@ executionRouter.post(
         result,
       });
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Code execution failed";
+      console.error("Execution service error:", message);
+
+      if (/fetch failed|network|timed out|temporarily unavailable|Judge0/i.test(message)) {
+        return res.status(503).json({
+          error: "Code execution service is temporarily unavailable. Please try again in a moment.",
+        });
+      }
+
       return next(err);
     }
   }
