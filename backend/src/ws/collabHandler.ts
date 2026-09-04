@@ -155,6 +155,12 @@ export function handleCollabConnection(ws: WebSocket, ctx: CollabContext): void 
     const message = payload.subarray(1);
 
     if (messageType === DOC_UPDATE) {
+      const client = room.clients.get(ws);
+      if (client?.role === "READER") {
+        ws.close(1008, "Reader role cannot edit collaborative files");
+        return;
+      }
+
       Y.applyUpdate(room.ydoc, message, ws);
       schedulePersist(room);
       return;

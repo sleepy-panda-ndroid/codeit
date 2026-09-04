@@ -103,6 +103,11 @@ authRouter.get("/me", authJwt, async (req: any, res) => {
   res.json(toAuthUser(user));
 });
 
+authRouter.post("/ws-ticket", authJwt, async (req: any, res) => {
+  const ticket = signJwt({ sub: String(req.userId), purpose: "collab-ws" }, { expiresIn: "30s" });
+  return res.json({ ticket });
+});
+
 const updateProfileSchema = z.object({
   name: z.string().trim().max(80),
   email: z.string().trim().email(),

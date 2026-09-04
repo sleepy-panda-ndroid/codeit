@@ -24,19 +24,20 @@ export type CollabContext = {
 export async function authenticateUpgrade(req: IncomingMessage): Promise<CollabContext | null> {
   try {
     const url = new URL(req.url ?? "", "http://internal");
-    const token = url.searchParams.get("token");
+    const ticket = url.searchParams.get("ticket");
     const projectId = url.searchParams.get("projectId");
     const nodeId = url.searchParams.get("nodeId");
 
-    if (!token || !projectId || !nodeId) return null;
+    if (!ticket || !projectId || !nodeId) return null;
     if (!mongoose.isValidObjectId(projectId) || !mongoose.isValidObjectId(nodeId)) return null;
 
     const secret = process.env.JWT_SECRET;
     if (!secret) throw new Error("JWT_SECRET missing");
 
-    const decoded = jwt.verify(token, secret) as any;
+    const decoded = jwt.verify(ticket, secret) as any;
     const userId: string | undefined = decoded?.sub;
-    if (!userId) return null;
+    const purpose = decoded?.purpose;
+    if (!userId || purpose !== "collab-ws") return null;
 
     const role = await getProjectRole(userId, projectId);
     if (!roleAtLeast(role, "READER")) return null;
