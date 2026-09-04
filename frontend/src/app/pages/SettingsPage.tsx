@@ -2,10 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Link } from "react-router";
 import {
   User,
-  Palette,
-  Code,
   Shield,
-  Bell,
   ArrowLeft,
   Save
 } from "lucide-react";
@@ -13,8 +10,6 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Card } from "../components/ui/card";
-import { Switch } from "../components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import {
@@ -23,17 +18,8 @@ import {
   getStoredUser,
   setAuthSession,
   updatePassword,
-  updatePreferences,
   updateProfile,
 } from "../../lib/auth";
-import {
-  DEFAULT_PREFERENCES,
-  type ThemeMode,
-  type UserPreferences,
-  getStoredUserPreferences,
-  mergeUserPreferences,
-  setStoredUserPreferences,
-} from "../../lib/settings";
 
 export default function SettingsPage() {
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
@@ -48,18 +34,6 @@ export default function SettingsPage() {
     bio: "",
     avatarDataUrl: "",
   });
-
-  const [theme, setTheme] = useState<ThemeMode>("dark");
-  const [fontSize, setFontSize] = useState(DEFAULT_PREFERENCES.fontSize);
-  const [tabSize, setTabSize] = useState(DEFAULT_PREFERENCES.tabSize);
-  const [autoSave, setAutoSave] = useState(DEFAULT_PREFERENCES.autoSave);
-  const [formatOnSave, setFormatOnSave] = useState(DEFAULT_PREFERENCES.formatOnSave);
-  const [minimap, setMinimap] = useState(DEFAULT_PREFERENCES.minimap);
-  const [notifications, setNotifications] = useState(DEFAULT_PREFERENCES.notifications);
-  const [emailNotifications, setEmailNotifications] = useState(DEFAULT_PREFERENCES.emailNotifications);
-  const [collaborationUpdates, setCollaborationUpdates] = useState(DEFAULT_PREFERENCES.collaborationUpdates);
-  const [errorAlerts, setErrorAlerts] = useState(DEFAULT_PREFERENCES.errorAlerts);
-  const [originalPreferences, setOriginalPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -76,19 +50,6 @@ export default function SettingsPage() {
   useEffect(() => {
     const token = getStoredToken();
     const storedUser = getStoredUser();
-    const localPreferences = getStoredUserPreferences();
-
-    setTheme(localPreferences.theme);
-    setFontSize(localPreferences.fontSize);
-    setTabSize(localPreferences.tabSize);
-    setAutoSave(localPreferences.autoSave);
-    setFormatOnSave(localPreferences.formatOnSave);
-    setMinimap(localPreferences.minimap);
-    setNotifications(localPreferences.notifications);
-    setEmailNotifications(localPreferences.emailNotifications);
-    setCollaborationUpdates(localPreferences.collaborationUpdates);
-    setErrorAlerts(localPreferences.errorAlerts);
-    setOriginalPreferences(localPreferences);
 
     if (storedUser) {
       const nextProfile = {
@@ -111,8 +72,6 @@ export default function SettingsPage() {
 
     getMe()
       .then((me) => {
-        const serverPreferences = mergeUserPreferences(me.preferences);
-
         const nextProfile = {
           name: me.name || "User",
           email: me.email || "user@example.com",
@@ -125,25 +84,7 @@ export default function SettingsPage() {
         setBio(nextProfile.bio);
         setAvatarDataUrl(nextProfile.avatarDataUrl);
         setOriginalProfile(nextProfile);
-
-        setTheme(serverPreferences.theme);
-        setFontSize(serverPreferences.fontSize);
-        setTabSize(serverPreferences.tabSize);
-        setAutoSave(serverPreferences.autoSave);
-        setFormatOnSave(serverPreferences.formatOnSave);
-        setMinimap(serverPreferences.minimap);
-        setNotifications(serverPreferences.notifications);
-        setEmailNotifications(serverPreferences.emailNotifications);
-        setCollaborationUpdates(serverPreferences.collaborationUpdates);
-        setErrorAlerts(serverPreferences.errorAlerts);
-        setOriginalPreferences(serverPreferences);
-
-
-        setStoredUserPreferences(serverPreferences);
-        setAuthSession(token, {
-          ...me,
-          preferences: serverPreferences,
-        });
+        setAuthSession(token, me);
       })
       .finally(() => {
         setLoading(false);
@@ -158,19 +99,6 @@ export default function SettingsPage() {
       .join("")
       .slice(0, 2) || "U";
   }, [name]);
-
-  const buildPreferences = (): UserPreferences => ({
-    theme,
-    fontSize,
-    tabSize,
-    autoSave,
-    formatOnSave,
-    minimap,
-    notifications,
-    emailNotifications,
-    collaborationUpdates,
-    errorAlerts,
-  });
 
   const handleSave = async () => {
     setSaveError("");
@@ -201,12 +129,6 @@ export default function SettingsPage() {
         avatarDataUrl,
       });
 
-      const preferencesToSave = buildPreferences();
-      const preferencesResponse = await updatePreferences(preferencesToSave);
-      const mergedPreferences = mergeUserPreferences(preferencesResponse.preferences);
-
-      setStoredUserPreferences(mergedPreferences);
-
       const nextProfile = {
         name: updatedProfile.name || "User",
         email: updatedProfile.email || "user@example.com",
@@ -219,12 +141,7 @@ export default function SettingsPage() {
       setBio(nextProfile.bio);
       setAvatarDataUrl(nextProfile.avatarDataUrl);
       setOriginalProfile(nextProfile);
-      setOriginalPreferences(mergedPreferences);
-
-      setAuthSession(token, {
-        ...updatedProfile,
-        preferences: mergedPreferences,
-      });
+      setAuthSession(token, updatedProfile);
 
       setSaveSuccess("Settings saved successfully.");
     } catch (err) {
@@ -239,17 +156,6 @@ export default function SettingsPage() {
     setEmail(originalProfile.email);
     setBio(originalProfile.bio);
     setAvatarDataUrl(originalProfile.avatarDataUrl);
-
-    setTheme(originalPreferences.theme);
-    setFontSize(originalPreferences.fontSize);
-    setTabSize(originalPreferences.tabSize);
-    setAutoSave(originalPreferences.autoSave);
-    setFormatOnSave(originalPreferences.formatOnSave);
-    setMinimap(originalPreferences.minimap);
-    setNotifications(originalPreferences.notifications);
-    setEmailNotifications(originalPreferences.emailNotifications);
-    setCollaborationUpdates(originalPreferences.collaborationUpdates);
-    setErrorAlerts(originalPreferences.errorAlerts);
 
     setSaveError("");
     setSaveSuccess("");
@@ -356,27 +262,6 @@ export default function SettingsPage() {
               Profile
             </TabsTrigger>
             <TabsTrigger 
-              value="appearance" 
-              className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
-            >
-              <Palette className="w-4 h-4 mr-2" />
-              Appearance
-            </TabsTrigger>
-            <TabsTrigger 
-              value="editor" 
-              className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
-            >
-              <Code className="w-4 h-4 mr-2" />
-              Editor
-            </TabsTrigger>
-            <TabsTrigger 
-              value="notifications" 
-              className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
-            >
-              <Bell className="w-4 h-4 mr-2" />
-              Notifications
-            </TabsTrigger>
-            <TabsTrigger 
               value="security" 
               className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
             >
@@ -446,156 +331,6 @@ export default function SettingsPage() {
                     onChange={(e) => setBio(e.target.value)}
                     className="w-full bg-[#1e1e1e] border border-[#3e3e42] text-white placeholder:text-gray-500 rounded-lg px-3 py-2"
                   />
-                </div>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* Appearance Settings */}
-          <TabsContent value="appearance" className="space-y-6">
-            <Card className="bg-[#252526] border-[#3e3e42] p-6">
-              <h2 className="text-xl font-semibold text-white mb-6">Appearance Preferences</h2>
-              
-              <div className="space-y-6">
-                <div>
-                  <Label htmlFor="theme" className="text-white mb-2">Theme</Label>
-                  <Select value={theme} onValueChange={(value) => setTheme(value as ThemeMode)}>
-                    <SelectTrigger className="bg-[#1e1e1e] border-[#3e3e42] text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#252526] border-[#3e3e42] text-white">
-                      <SelectItem value="dark">Dark Mode</SelectItem>
-                      <SelectItem value="light">Light Mode</SelectItem>
-                      <SelectItem value="auto">Auto (System)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <Card
-                    className={`bg-[#1e1e1e] border p-4 cursor-pointer hover:border-indigo-500 ${theme === "dark" ? "border-indigo-500" : "border-[#3e3e42]"}`}
-                    onClick={() => setTheme("dark")}
-                  >
-                    <div className="bg-[#0a0a0a] h-20 rounded mb-3"></div>
-                    <p className="text-sm text-white">Dark</p>
-                  </Card>
-                  <Card
-                    className={`bg-[#1e1e1e] border p-4 cursor-pointer hover:border-indigo-500 ${theme === "light" ? "border-indigo-500" : "border-[#3e3e42]"}`}
-                    onClick={() => setTheme("light")}
-                  >
-                    <div className="bg-white h-20 rounded mb-3"></div>
-                    <p className="text-sm text-white">Light</p>
-                  </Card>
-                  <Card
-                    className={`bg-[#1e1e1e] border p-4 cursor-pointer hover:border-indigo-500 ${theme === "auto" ? "border-indigo-500" : "border-[#3e3e42]"}`}
-                    onClick={() => setTheme("auto")}
-                  >
-                    <div className="bg-gradient-to-r from-[#0a0a0a] to-white h-20 rounded mb-3"></div>
-                    <p className="text-sm text-white">Auto</p>
-                  </Card>
-                </div>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* Editor Settings */}
-          <TabsContent value="editor" className="space-y-6">
-            <Card className="bg-[#252526] border-[#3e3e42] p-6">
-              <h2 className="text-xl font-semibold text-white mb-6">Editor Preferences</h2>
-              
-              <div className="space-y-6">
-                <div>
-                  <Label htmlFor="fontSize" className="text-white mb-2">Font Size</Label>
-                  <Select value={fontSize} onValueChange={setFontSize}>
-                    <SelectTrigger className="bg-[#1e1e1e] border-[#3e3e42] text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#252526] border-[#3e3e42] text-white">
-                      <SelectItem value="12">12px</SelectItem>
-                      <SelectItem value="14">14px</SelectItem>
-                      <SelectItem value="16">16px</SelectItem>
-                      <SelectItem value="18">18px</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="tabSize" className="text-white mb-2">Tab Size</Label>
-                  <Select value={tabSize} onValueChange={setTabSize}>
-                    <SelectTrigger className="bg-[#1e1e1e] border-[#3e3e42] text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#252526] border-[#3e3e42] text-white">
-                      <SelectItem value="2">2 spaces</SelectItem>
-                      <SelectItem value="4">4 spaces</SelectItem>
-                      <SelectItem value="8">8 spaces</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-[#1e1e1e] rounded-lg border border-[#3e3e42]">
-                  <div>
-                    <p className="font-medium text-white">Auto Save</p>
-                    <p className="text-sm text-gray-400">Automatically save changes</p>
-                  </div>
-                  <Switch checked={autoSave} onCheckedChange={setAutoSave} />
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-[#1e1e1e] rounded-lg border border-[#3e3e42]">
-                  <div>
-                    <p className="font-medium text-white">Format on Save</p>
-                    <p className="text-sm text-gray-400">Auto-format code when saving</p>
-                  </div>
-                  <Switch checked={formatOnSave} onCheckedChange={setFormatOnSave} />
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-[#1e1e1e] rounded-lg border border-[#3e3e42]">
-                  <div>
-                    <p className="font-medium text-white">Minimap</p>
-                    <p className="text-sm text-gray-400">Show code minimap on the right</p>
-                  </div>
-                  <Switch checked={minimap} onCheckedChange={setMinimap} />
-                </div>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* Notifications Settings */}
-          <TabsContent value="notifications" className="space-y-6">
-            <Card className="bg-[#252526] border-[#3e3e42] p-6">
-              <h2 className="text-xl font-semibold text-white mb-6">Notification Preferences</h2>
-              
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-[#1e1e1e] rounded-lg border border-[#3e3e42]">
-                  <div>
-                    <p className="font-medium text-white">Push Notifications</p>
-                    <p className="text-sm text-gray-400">Receive notifications in the app</p>
-                  </div>
-                  <Switch checked={notifications} onCheckedChange={setNotifications} />
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-[#1e1e1e] rounded-lg border border-[#3e3e42]">
-                  <div>
-                    <p className="font-medium text-white">Email Notifications</p>
-                    <p className="text-sm text-gray-400">Receive updates via email</p>
-                  </div>
-                  <Switch checked={emailNotifications} onCheckedChange={setEmailNotifications} />
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-[#1e1e1e] rounded-lg border border-[#3e3e42]">
-                  <div>
-                    <p className="font-medium text-white">Collaboration Updates</p>
-                    <p className="text-sm text-gray-400">Notify when someone joins your project</p>
-                  </div>
-                  <Switch checked={collaborationUpdates} onCheckedChange={setCollaborationUpdates} />
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-[#1e1e1e] rounded-lg border border-[#3e3e42]">
-                  <div>
-                    <p className="font-medium text-white">Error Alerts</p>
-                    <p className="text-sm text-gray-400">Alert when code execution fails</p>
-                  </div>
-                  <Switch checked={errorAlerts} onCheckedChange={setErrorAlerts} />
                 </div>
               </div>
             </Card>
