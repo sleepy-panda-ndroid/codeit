@@ -256,6 +256,7 @@ export default function SettingsPage() {
           <TabsList className="bg-[#252526] border border-[#3e3e42]">
             <TabsTrigger 
               value="profile" 
+              type="button"
               className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
             >
               <User className="w-4 h-4 mr-2" />
@@ -263,6 +264,7 @@ export default function SettingsPage() {
             </TabsTrigger>
             <TabsTrigger 
               value="security" 
+              type="button"
               className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
             >
               <Shield className="w-4 h-4 mr-2" />
@@ -382,6 +384,7 @@ export default function SettingsPage() {
                 {passwordSuccess && <p className="text-sm text-green-400">{passwordSuccess}</p>}
 
                 <Button
+                  type="button"
                   className="bg-indigo-600 hover:bg-indigo-700 text-white"
                   onClick={handleUpdatePassword}
                   disabled={passwordSaving}
@@ -415,6 +418,7 @@ export default function SettingsPage() {
         {/* Save Button */}
         <div className="flex justify-end gap-3 mt-6">
           <Button
+            type="button"
             variant="outline"
             className="border-white/20 text-white hover:bg-white/5"
             onClick={handleCancel}
@@ -422,7 +426,7 @@ export default function SettingsPage() {
           >
             Cancel
           </Button>
-          <Button onClick={() => void handleSave()} className="bg-indigo-600 hover:bg-indigo-700 text-white" disabled={saving || loading}>
+          <Button type="button" onClick={() => void handleSave()} className="bg-indigo-600 hover:bg-indigo-700 text-white" disabled={saving || loading}>
             <Save className="w-4 h-4 mr-2" />
             {saving ? "Saving..." : "Save Changes"}
           </Button>

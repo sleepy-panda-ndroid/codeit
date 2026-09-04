@@ -194,7 +194,13 @@ export default function DashboardLayout() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
                 value={searchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
+                type="search"
+                name="project-search"
+                autoComplete="off"
+                onChange={(e) => {
+                  if (document.activeElement !== e.currentTarget) return;
+                  handleSearchChange(e.target.value);
+                }}
                 placeholder="Search projects..."
                 className="pl-10 bg-[#1e1e1e] border-[#3e3e42] text-white placeholder:text-gray-500"
               />
