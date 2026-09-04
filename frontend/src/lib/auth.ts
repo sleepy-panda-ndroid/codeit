@@ -21,8 +21,9 @@ const TOKEN_KEY = "token";
 const USER_KEY = "user";
 
 export function setAuthSession(token: string, user: AuthUser) {
+  const { avatarDataUrl: _avatarDataUrl, ...sessionUser } = user;
   sessionStorage.setItem(TOKEN_KEY, token);
-  sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+  sessionStorage.setItem(USER_KEY, JSON.stringify(sessionUser));
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
   window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));

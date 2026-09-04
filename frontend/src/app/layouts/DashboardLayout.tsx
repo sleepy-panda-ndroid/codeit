@@ -131,7 +131,9 @@ export default function DashboardLayout() {
       if (!stored) return;
       setUserName(stored.name || "User");
       setUserEmail(stored.email || "user@example.com");
-      setUserAvatar(stored.avatarDataUrl || "");
+      if (stored.avatarDataUrl !== undefined) {
+        setUserAvatar(stored.avatarDataUrl);
+      }
     };
 
     window.addEventListener(AUTH_SESSION_CHANGED_EVENT, syncUser);
