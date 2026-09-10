@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent } from "react";
 import { useParams } from "react-router";
 import {
   File,
@@ -10,8 +10,9 @@ import {
 import { Button } from "../components/ui/button";
 import FileExplorer from "../components/FileExplorer";
 import CodeEditor from "../components/CodeEditor";
-import TerminalPanel, { ExecutionResult } from "../components/TerminalPanel";
+import TerminalPanel from "../components/TerminalPanel";
 import AIChatPanel from "../components/AIChatPanel";
+import CPHPanel from "../components/CPHPanel";
 
 import EditorDashboard, { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from "../components/EditorDashboard";
 import EditorTabs from "../components/EditorTabs";
@@ -49,7 +50,7 @@ import {
   type NodeType,
 } from "../../lib/nodes";
 import type { AIChatContext } from "../../lib/ai";
-import { getProject } from "../../lib/projects";
+import { downloadProject, listProjectAudit, type ProjectAuditEntry } from "../../lib/projects";
 import { useCollabSession } from "../ide/hooks/useCollabSession";
 import { useProjectLoad } from "../ide/hooks/useProjectLoad";
 import { useFileSave } from "../ide/hooks/useFileSave";
@@ -58,6 +59,7 @@ import { useCodeExecution } from "../ide/hooks/useCodeExecution";
 import { useAIContext } from "../ide/hooks/useAIContext";
 import { useIdeShortcuts } from "../ide/hooks/useIdeShortcuts";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../components/ui/resizable";
+import { unzipSync } from "fflate";
 
 function loadEditorDashboardSettings(): EditorSettings {
   if (typeof window === "undefined") {
@@ -119,10 +121,15 @@ export default function IDEPage() {
   } = useOpenFiles();
   const [showSidebar, setShowSidebar] = useState(true);
   const [showAIPanel, setShowAIPanel] = useState(true);
+  const [showCPHPanel, setShowCPHPanel] = useState(false);
   const [showTerminal, setShowTerminal] = useState(true);
   const [stdin, setStdin] = useState("");
   const [showEditorSettings, setShowEditorSettings] = useState(false);
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(() => loadEditorDashboardSettings());
+  const [auditEntries, setAuditEntries] = useState<ProjectAuditEntry[]>([]);
+  const [showAudit, setShowAudit] = useState(false);
+  const [transferError, setTransferError] = useState("");
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const {
     projectName,
     role,
@@ -195,11 +202,11 @@ export default function IDEPage() {
     setPanelSizes((current) => {
       const next = { ...current };
       if (showSidebar) next.sidebar = sizes[index++];
-      next.editor = sizes[index++];
-      if (showAIPanel) next.aiPanel = sizes[index];
+      next.editorWidth = sizes[index++];
+      if (showAIPanel || showCPHPanel) next.aiPanel = sizes[index];
       return next;
     });
-  }, [showAIPanel, showSidebar]);
+  }, [showAIPanel, showCPHPanel, showSidebar]);
   const handleVerticalLayout = useCallback((sizes: number[]) => {
     if (!showTerminal || sizes.length < 2) return;
     setPanelSizes((current) => ({ ...current, editor: sizes[0], terminal: sizes[1] }));
@@ -270,9 +277,50 @@ export default function IDEPage() {
   const updateEditorSettings = useCallback((next: EditorSettings) => {
     setEditorSettings(next);
   }, []);
+  const handleDownload = useCallback(async () => {
+    if (!projectId) return;
+    const result = await downloadProject(projectId);
+    const picker = (window as Window & { showDirectoryPicker?: () => Promise<any> }).showDirectoryPicker;
+    if (picker) {
+      const directory = await picker();
+      for (const [path, data] of Object.entries(unzipSync(new Uint8Array(await result.blob.arrayBuffer())))) {
+        if (path.endsWith("/.keep")) continue;
+        const parts = path.split("/");
+        const fileName = parts.pop()!;
+        let target = directory;
+        for (const part of parts) target = await target.getDirectoryHandle(part, { create: true });
+        const writable = await (await target.getFileHandle(fileName, { create: true })).createWritable();
+        await writable.write(data);
+        await writable.close();
+      }
+      return;
+    }
+    const url = URL.createObjectURL(result.blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = result.filename; link.click(); URL.revokeObjectURL(url);
+  }, [projectId]);
+  const handleUpload = useCallback(() => uploadInputRef.current?.click(), []);
+  const handleUploadFile = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.currentTarget.value = "";
+    if (!files.length || !projectId) return;
+    try {
+      setTransferError("");
+      await Promise.all(files.map(async (file) => createNode(projectId, { parentId: null, type: "file", name: file.name, content: await file.text() })));
+      window.location.reload();
+    }
+    catch (error) { setTransferError(error instanceof Error ? error.message : "Project upload failed"); }
+  }, [projectId]);
+  const handleAudit = useCallback(async () => {
+    if (!projectId) return;
+    try { setAuditEntries(await listProjectAudit(projectId)); setShowAudit(true); } catch (error) { setTransferError(error instanceof Error ? error.message : "Could not load activity"); }
+  }, [projectId]);
 
   return (
     <div className="h-full flex flex-col bg-[#1e1e1e] text-white overflow-hidden">
+      <input ref={uploadInputRef} type="file" multiple accept=".cpp,.py,.c,.h,.hpp,.java,.js,.ts,.tsx,.jsx,.go,.rs,.rb,.php,.html,.css,.json,.md,.txt" className="hidden" onChange={handleUploadFile} />
+      {showAudit && <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"><div className="w-full max-w-2xl max-h-[80vh] overflow-auto rounded-lg border border-[#3e3e42] bg-[#252526] p-5"><div className="flex justify-between mb-4"><h2 className="text-lg font-semibold">Project activity</h2><Button size="sm" variant="ghost" onClick={() => setShowAudit(false)}>Close</Button></div>{auditEntries.map((entry) => <div key={entry.id} className="border-b border-[#3e3e42] py-3 text-sm"><p><span className="text-indigo-300">{entry.actor?.name || "Unknown"}</span> {entry.action.toLowerCase().replace(/_/g, " ")} <span className="text-white">{entry.targetName}</span></p><p className="text-xs text-gray-500">{new Date(entry.createdAt).toLocaleString()}</p></div>)}</div></div>}
+      {transferError && <div className="px-3 py-2 bg-red-950/30 border-b border-red-800/50 text-red-300 text-xs">{transferError}</div>}
       {closeConfirm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
           <div className="bg-[#252526] border border-[#4e4e52] rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl">
@@ -340,13 +388,17 @@ export default function IDEPage() {
         isRunning={isRunning}
         showSidebar={showSidebar}
         showAIPanel={showAIPanel}
+        showCPHPanel={showCPHPanel}
         showEditorSettings={showEditorSettings}
-        initials={initials}
         onToggleSidebar={() => setShowSidebar((value) => !value)}
         onSave={() => void handleSave()}
         onRun={() => void handleRun()}
-        onToggleAIPanel={() => setShowAIPanel((value) => !value)}
+        onToggleAIPanel={() => { setShowCPHPanel(false); setShowAIPanel((value) => !value); }}
+        onToggleCPHPanel={() => { setShowAIPanel(false); setShowCPHPanel((value) => !value); }}
         onOpenEditorSettings={() => setShowEditorSettings(true)}
+        onDownload={() => void handleDownload()}
+        onUpload={handleUpload}
+        onAudit={() => void handleAudit()}
       />
 
       {fileError && (
@@ -379,7 +431,7 @@ export default function IDEPage() {
         {showSidebar && <ResizableHandle className="bg-[#3e3e42] hover:bg-indigo-500/70" />}
 
         <ResizablePanel
-          defaultSize={panelSizes.editor}
+                    defaultSize={panelSizes.editorWidth}
           minSize={30}
           className="min-w-0"
         >
@@ -426,7 +478,7 @@ export default function IDEPage() {
           {showTerminal && (
             <>
             <ResizableHandle className="bg-[#3e3e42] hover:bg-indigo-500/70" />
-            <ResizablePanel defaultSize={panelSizes.terminal} minSize={15} maxSize={60}>
+            <ResizablePanel defaultSize={panelSizes.terminal} minSize={15} maxSize={75}>
               <TerminalPanel
                 onClose={() => setShowTerminal(false)}
                 isRunning={isRunning}
@@ -459,7 +511,7 @@ export default function IDEPage() {
           )}
           </ResizablePanelGroup>
         </ResizablePanel>
-        {showAIPanel && <ResizableHandle className="bg-[#3e3e42] hover:bg-indigo-500/70" />}
+        {(showAIPanel || showCPHPanel) && <ResizableHandle className="bg-[#3e3e42] hover:bg-indigo-500/70" />}
 
         {showAIPanel && (
           <ResizablePanel defaultSize={panelSizes.aiPanel} minSize={15} maxSize={80} className="bg-[#252526] border-l border-[#3e3e42]">
@@ -469,6 +521,11 @@ export default function IDEPage() {
               models={aiModels}
               defaultModel={aiDefaultModel}
             />
+          </ResizablePanel>
+        )}
+        {showCPHPanel && (
+          <ResizablePanel defaultSize={panelSizes.aiPanel} minSize={20} maxSize={80} className="bg-[#252526] border-l border-[#3e3e42]">
+            <CPHPanel projectId={projectId ?? ""} sourceCode={activeFile?.content ?? ""} language={activeFile ? executionLanguageFromName(activeFile.name) : null} filePath={activeFile?.name ?? ""} />
           </ResizablePanel>
         )}
       </ResizablePanelGroup>

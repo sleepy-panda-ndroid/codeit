@@ -28,11 +28,13 @@ export default function SettingsPage() {
   const [email, setEmail] = useState("user@example.com");
   const [bio, setBio] = useState("");
   const [avatarDataUrl, setAvatarDataUrl] = useState("");
+  const [profileVisibility, setProfileVisibility] = useState<"PUBLIC" | "PRIVATE">("PUBLIC");
   const [originalProfile, setOriginalProfile] = useState({
     name: "User",
     email: "user@example.com",
     bio: "",
     avatarDataUrl: "",
+    profileVisibility: "PUBLIC" as "PUBLIC" | "PRIVATE",
   });
 
   const [currentPassword, setCurrentPassword] = useState("");
@@ -57,11 +59,13 @@ export default function SettingsPage() {
         email: storedUser.email || "user@example.com",
         bio: storedUser.bio || "",
         avatarDataUrl: storedUser.avatarDataUrl || "",
+        profileVisibility: storedUser.profileVisibility || "PUBLIC",
       };
       setName(nextProfile.name);
       setEmail(nextProfile.email);
       setBio(nextProfile.bio);
       setAvatarDataUrl(nextProfile.avatarDataUrl);
+      setProfileVisibility(nextProfile.profileVisibility);
       setOriginalProfile(nextProfile);
     }
 
@@ -77,12 +81,14 @@ export default function SettingsPage() {
           email: me.email || "user@example.com",
           bio: me.bio || "",
           avatarDataUrl: me.avatarDataUrl || "",
+          profileVisibility: me.profileVisibility || "PUBLIC",
         };
 
         setName(nextProfile.name);
         setEmail(nextProfile.email);
         setBio(nextProfile.bio);
         setAvatarDataUrl(nextProfile.avatarDataUrl);
+        setProfileVisibility(nextProfile.profileVisibility);
         setOriginalProfile(nextProfile);
         setAuthSession(token, me);
       })
@@ -127,6 +133,7 @@ export default function SettingsPage() {
         email: email.trim(),
         bio: bio.trim(),
         avatarDataUrl,
+        profileVisibility,
       });
 
       const nextProfile = {
@@ -134,12 +141,14 @@ export default function SettingsPage() {
         email: updatedProfile.email || "user@example.com",
         bio: updatedProfile.bio || "",
         avatarDataUrl: updatedProfile.avatarDataUrl || avatarDataUrl,
+        profileVisibility: updatedProfile.profileVisibility || profileVisibility,
       };
 
       setName(nextProfile.name);
       setEmail(nextProfile.email);
       setBio(nextProfile.bio);
       setAvatarDataUrl(nextProfile.avatarDataUrl);
+      setProfileVisibility(nextProfile.profileVisibility);
       setOriginalProfile(nextProfile);
       setAuthSession(token, updatedProfile);
 
@@ -156,6 +165,7 @@ export default function SettingsPage() {
     setEmail(originalProfile.email);
     setBio(originalProfile.bio);
     setAvatarDataUrl(originalProfile.avatarDataUrl);
+    setProfileVisibility(originalProfile.profileVisibility);
 
     setSaveError("");
     setSaveSuccess("");
@@ -333,6 +343,19 @@ export default function SettingsPage() {
                     onChange={(e) => setBio(e.target.value)}
                     className="w-full bg-[#1e1e1e] border border-[#3e3e42] text-white placeholder:text-gray-500 rounded-lg px-3 py-2"
                   />
+                </div>
+
+                <div>
+                  <Label htmlFor="profileVisibility" className="text-white mb-2">Profile visibility</Label>
+                  <select
+                    id="profileVisibility"
+                    value={profileVisibility}
+                    onChange={(event) => setProfileVisibility(event.target.value as "PUBLIC" | "PRIVATE")}
+                    className="w-full bg-[#1e1e1e] border border-[#3e3e42] text-white rounded-lg px-3 py-2"
+                  >
+                    <option value="PUBLIC">Public: searchable by name or email</option>
+                    <option value="PRIVATE">Private: visible only to me</option>
+                  </select>
                 </div>
               </div>
             </Card>
