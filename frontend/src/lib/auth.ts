@@ -8,6 +8,7 @@ export type AuthUser = {
   bio?: string;
   avatarDataUrl?: string;
   preferences?: UserPreferences;
+  profileVisibility?: "PUBLIC" | "PRIVATE";
 };
 
 type AuthResponse = {
@@ -68,11 +69,20 @@ export async function getMe() {
   return apiFetch<AuthUser>("/auth/me");
 }
 
-export async function updateProfile(input: { name: string; email: string; bio?: string; avatarDataUrl?: string }) {
+export async function updateProfile(input: { name: string; email: string; bio?: string; avatarDataUrl?: string; profileVisibility?: "PUBLIC" | "PRIVATE" }) {
   return apiFetch<AuthUser>("/auth/profile", {
     method: "PUT",
     body: JSON.stringify(input),
   });
+}
+
+export type PublicUser = { id: string; name: string; email: string; bio: string; avatarDataUrl: string };
+export async function searchUsers(q: string) {
+  return apiFetch<PublicUser[]>(`/auth/users/search?q=${encodeURIComponent(q)}`);
+}
+export async function getPublicProfile(id: string) {
+  type ProfileProject = { _id: string; name: string; description?: string; visibility: string; updatedAt: string };
+  return apiFetch<{ user: PublicUser; projects: ProfileProject[]; ownedProjects: ProfileProject[]; collaboratedProjects: ProfileProject[]; commonProjects: ProfileProject[] }>(`/auth/users/${id}`);
 }
 
 export async function updatePassword(input: { currentPassword: string; newPassword: string }) {

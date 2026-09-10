@@ -21,6 +21,7 @@ const UserSchema = new Schema(
     name: { type: String, trim: true, default: "" },
     bio: { type: String, trim: true, default: "" },
     avatarDataUrl: { type: String, default: "" },
+    profileVisibility: { type: String, enum: ["PUBLIC", "PRIVATE"], default: "PUBLIC" },
     preferences: { type: UserPreferencesSchema, default: () => ({}) },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
