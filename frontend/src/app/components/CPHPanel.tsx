@@ -22,14 +22,52 @@ function firstDifference(required: string, obtained: string) {
   return -1;
 }
 
-function OutputBlock({ label, value, difference }: { label: string; value: string; difference: number }) {
-  const lines = value ? normalizeText(value).split("\n") : [];
-  return <div className="min-h-0 flex-1 rounded border border-[#3e3e42] bg-[#252526] overflow-hidden">
-    <div className="px-3 py-2 border-b border-[#3e3e42] text-xs font-medium text-gray-300">{label}</div>
-    <div className="h-full max-h-56 overflow-auto p-3 font-mono text-xs">
-      {lines.length ? lines.map((line, index) => <div key={index} className={`whitespace-pre-wrap px-2 ${difference === index ? "bg-red-500/20 text-red-200 border-l-2 border-red-400" : "text-gray-300"}`}><span className="mr-3 inline-block w-6 text-right text-gray-600">{index + 1}</span>{line || " "}</div>) : <span className="text-gray-600">No output yet</span>}
+// Shared editable textarea with a line-numbered overlay that highlights the
+// first mismatching line. `tone` controls the highlight color so the same
+// component can mark "this is what it should say" (green, Required side)
+// and "this is what you got, and it's wrong from here" (red, Obtained side).
+function HighlightedTextarea({
+  value,
+  onChange,
+  difference,
+  tone,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  difference: number;
+  tone: "red" | "green";
+  ariaLabel: string;
+}) {
+  const lines = value.replace(/\r/g, "").split("\n");
+  const highlightClass = tone === "red"
+    ? "bg-red-500/20 text-red-200 border-l-2 border-red-400"
+    : "bg-green-500/20 text-green-200 border-l-2 border-green-400";
+
+  return (
+    <div className="min-h-0 flex-1 rounded border border-[#3e3e42] bg-[#252526] overflow-hidden">
+      <div className="relative h-full max-h-56 overflow-auto p-3 font-mono text-xs">
+        <div className="pointer-events-none absolute inset-3" aria-hidden="true">
+          {lines.map((line, index) => (
+            <div
+              key={index}
+              className={`whitespace-pre-wrap pl-8 ${difference === index ? highlightClass : "text-transparent"}`}
+            >
+              <span className="absolute left-3 text-gray-600">{index + 1}</span>
+              {line || " "}
+            </div>
+          ))}
+        </div>
+        <textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="relative min-h-24 h-full w-full resize-y bg-transparent pl-8 text-gray-300 outline-none"
+          spellCheck={false}
+          aria-label={ariaLabel}
+        />
+      </div>
     </div>
-  </div>;
+  );
 }
 
 export default function CPHPanel({ projectId, sourceCode, language, filePath }: { projectId: string; sourceCode: string; language: ExecutionLanguage | null; filePath: string }) {
@@ -45,6 +83,7 @@ export default function CPHPanel({ projectId, sourceCode, language, filePath }: 
   const difference = firstDifference(requiredText, obtained);
   const hasResult = obtained.length > 0;
   const valid = hasResult && difference === -1;
+  const highlightIndex = hasResult ? difference : -1;
 
   useEffect(() => {
     try {
@@ -76,6 +115,38 @@ export default function CPHPanel({ projectId, sourceCode, language, filePath }: 
     <div className="flex gap-2 shrink-0"><input value={problem} onChange={(event) => setProblem(event.target.value)} placeholder="Codeforces URL or 1234 A" className="min-w-0 flex-1 bg-[#252526] border border-[#3e3e42] rounded px-2 text-xs outline-none" /><Button size="sm" onClick={() => void loadTests()} disabled={loading || !problem.trim()}>{loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Load"}</Button><Button size="sm" onClick={() => void run()} disabled={running || !tests.length || !language}><Play className="w-3 h-3 mr-1" />{running ? "Running" : "Run"}</Button></div>
     {error && <p className="shrink-0 text-xs text-red-300">{error}</p>}
     <section className="min-h-0 flex flex-col gap-2 flex-1"><h3 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-400">Input</h3><textarea value={inputText} onChange={(event) => setInputText(event.target.value)} placeholder="Load a Codeforces problem to see all testcases." className="min-h-20 flex-1 resize-none overflow-auto rounded border border-[#3e3e42] bg-[#252526] p-3 font-mono text-xs text-gray-300 outline-none" spellCheck={false} /></section>
-    <section className="min-h-0 flex flex-col gap-2 flex-1"><div className="flex items-center justify-between shrink-0"><h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Output</h3>{hasResult && (valid ? <span className="flex items-center gap-1 text-xs text-green-400"><CheckCircle2 className="w-3 h-3" />Valid</span> : <span className="flex items-center gap-1 text-xs text-red-400"><XCircle className="w-3 h-3" />Invalid at line {difference + 1}</span>)}</div><div className="min-h-0 flex gap-2 flex-1"><div className="min-h-0 flex-1 flex flex-col gap-1"><span className="text-xs text-gray-500">Required</span><textarea value={requiredText} onChange={(event) => setRequiredText(event.target.value)} className="min-h-20 flex-1 resize-none overflow-auto rounded border border-[#3e3e42] bg-[#252526] p-3 font-mono text-xs text-gray-300 outline-none" spellCheck={false} />{hasResult && difference >= 0 && <span className="text-xs text-red-300">First difference: line {difference + 1}</span>}</div><div className="min-h-0 flex-1 flex flex-col gap-1"><span className="text-xs text-gray-500">Obtained</span><OutputBlock label="" value={obtained} difference={hasResult ? difference : -1} /></div></div></section>
+    <section className="min-h-0 flex flex-col gap-2 flex-1">
+        <div className="flex items-center justify-between shrink-0">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Output</h3>
+            {hasResult && (valid ? 
+            <span className="flex items-center gap-1 text-xs text-green-400">
+                <CheckCircle2 className="w-3 h-3" />Valid
+            </span> : 
+            <span className="flex items-center gap-1 text-xs text-red-400">
+                <XCircle className="w-3 h-3" />Invalid at line {difference + 1}</span>)}
+        </div>
+        <div className="min-h-0 flex gap-2 flex-1">
+            <div className="min-h-0 flex-1 flex flex-col gap-1">
+                <span className="text-xs text-gray-500">Required</span>
+                <HighlightedTextarea
+                  value={requiredText}
+                  onChange={setRequiredText}
+                  difference={highlightIndex}
+                  tone="green"
+                  ariaLabel="Required output"
+                />
+            </div>
+            <div className="min-h-0 flex-1 flex flex-col gap-1">
+                <span className="text-xs text-gray-500">Obtained</span>
+                <HighlightedTextarea
+                  value={obtained}
+                  onChange={setObtained}
+                  difference={highlightIndex}
+                  tone="red"
+                  ariaLabel="Obtained output"
+                />
+            </div>
+        </div>
+    </section>
   </div>;
 }
