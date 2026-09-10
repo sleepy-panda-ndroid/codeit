@@ -15,6 +15,7 @@ export interface PersistedIdeState {
   stdin?: string;
   panelSizes?: {
     sidebar: number;
+    editorWidth: number;
     editor: number;
     terminal: number;
     aiPanel: number;

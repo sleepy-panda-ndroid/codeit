@@ -9,6 +9,7 @@ import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 import DashboardLayout from "./layouts/DashboardLayout";
 import NotificationsPage from "./pages/NotificationsPage";
+import ProfilePage from "./pages/ProfilePage";
 
 export const router = createBrowserRouter([
   {
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
       { path: "ide/:projectId", Component: IDEPage },
       { path: "collaboration/:projectId", Component: CollaborationPage },
       { path: "settings", Component: SettingsPage },
+      { path: "profile/:userId", Component: ProfilePage },
     ],
   },
   {

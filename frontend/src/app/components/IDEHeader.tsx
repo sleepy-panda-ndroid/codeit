@@ -1,6 +1,5 @@
-import { Bot, CheckCheck, Loader2, PanelLeft, PanelLeftClose, Play, Save, Settings, Users } from "lucide-react";
+import { Bot, CheckCheck, Download, History, Loader2, PanelLeft, PanelLeftClose, Play, Save, Settings, Upload, Users } from "lucide-react";
 import { Button } from "./ui/button";
-import { Avatar, AvatarFallback } from "./ui/avatar";
 
 type SaveStatus = "saved" | "saving" | "unsaved";
 type CollabStatus = "idle" | "connecting" | "syncing" | "ready" | "error";
@@ -16,13 +15,17 @@ interface IDEHeaderProps {
   isRunning: boolean;
   showSidebar: boolean;
   showAIPanel: boolean;
+  showCPHPanel: boolean;
   showEditorSettings: boolean;
-  initials: string;
   onToggleSidebar: () => void;
   onSave: () => void;
   onRun: () => void;
   onToggleAIPanel: () => void;
+  onToggleCPHPanel: () => void;
   onOpenEditorSettings: () => void;
+  onDownload: () => void;
+  onUpload: () => void;
+  onAudit: () => void;
 }
 
 export default function IDEHeader({
@@ -36,13 +39,17 @@ export default function IDEHeader({
   isRunning,
   showSidebar,
   showAIPanel,
+  showCPHPanel,
   showEditorSettings,
-  initials,
   onToggleSidebar,
   onSave,
   onRun,
   onToggleAIPanel,
+  onToggleCPHPanel,
   onOpenEditorSettings,
+  onDownload,
+  onUpload,
+  onAudit,
 }: IDEHeaderProps) {
   const collabLabel = collabStatus === "ready"
     ? `${collaboratorCount} online`
@@ -70,17 +77,18 @@ export default function IDEHeader({
             {saveStatus === "unsaved" && <span className="flex items-center gap-1 text-xs text-orange-400"><span className="w-1.5 h-1.5 rounded-full bg-orange-400" /> Unsaved</span>}
           </>
         )}
+        {hasActiveFile && <Button size="sm" variant="ghost" className="h-7 px-2.5 text-xs text-gray-300 hover:text-white hover:bg-[#2a2d2e] disabled:opacity-40" onClick={onSave} disabled={readOnly || saveStatus === "saved" || saveStatus === "saving"} title="Save (Ctrl+S)"><Save className="w-3.5 h-3.5 mr-1.5" />Save</Button>}
+        <Button size="icon" variant="ghost" className="w-7 h-7 text-gray-400 hover:text-white hover:bg-[#2a2d2e]" onClick={onDownload} title="Download project"><Download className="w-4 h-4" /></Button>
+        {!readOnly && <Button size="icon" variant="ghost" className="w-7 h-7 text-gray-400 hover:text-white hover:bg-[#2a2d2e]" onClick={onUpload} title="Upload source files"><Upload className="w-4 h-4" /></Button>}
+        <Button size="icon" variant="ghost" className="w-7 h-7 text-gray-400 hover:text-white hover:bg-[#2a2d2e]" onClick={onAudit} title="Project activity"><History className="w-4 h-4" /></Button>
       </div>
       <div className="flex items-center gap-1.5">
-        <Button size="sm" variant="ghost" className="h-7 px-2.5 text-xs text-gray-300 hover:text-white hover:bg-[#2a2d2e] disabled:opacity-40" onClick={onSave} disabled={readOnly || saveStatus === "saved" || saveStatus === "saving"} title="Save (Ctrl+S)">
-          <Save className="w-3.5 h-3.5 mr-1.5" />Save
-        </Button>
         <Button size="sm" className={`h-7 px-3 text-xs text-white transition-all ${isRunning ? "bg-green-700 cursor-not-allowed" : "bg-green-600 hover:bg-green-500"}`} onClick={onRun} disabled={isRunning} title="Run (Ctrl+Enter)">
           {isRunning ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Running...</> : <><Play className="w-3.5 h-3.5 mr-1.5" />Run</>}
         </Button>
         <Button size="icon" variant="ghost" className={`w-7 h-7 hover:bg-[#2a2d2e] ${showAIPanel ? "text-indigo-400" : "text-gray-400 hover:text-white"}`} onClick={onToggleAIPanel} title="Toggle AI assistant"><Bot className="w-4 h-4" /></Button>
+        <Button size="icon" variant="ghost" className={`w-7 h-7 hover:bg-[#2a2d2e] ${showCPHPanel ? "text-orange-400" : "text-gray-400 hover:text-white"}`} onClick={onToggleCPHPanel} title="Toggle Codeforces helper"><img src="https://codeforces.org/s/0/favicon-32x32.png" alt="Codeforces" className="w-4 h-4" /></Button>
         <Button size="icon" variant="ghost" className={`w-7 h-7 hover:bg-[#2a2d2e] ${showEditorSettings ? "text-indigo-400" : "text-gray-400 hover:text-white"}`} onClick={onOpenEditorSettings} title="Editor settings (Ctrl+,)"><Settings className="w-4 h-4" /></Button>
-        <Avatar className="w-7 h-7 ml-1"><AvatarFallback className="bg-indigo-600 text-white text-xs">{initials}</AvatarFallback></Avatar>
       </div>
     </div>
   );

@@ -201,7 +201,7 @@ export default function DashboardLayout() {
                   if (document.activeElement !== e.currentTarget) return;
                   handleSearchChange(e.target.value);
                 }}
-                placeholder="Search projects..."
+                placeholder="Search projects and people..."
                 className="pl-10 bg-[#1e1e1e] border-[#3e3e42] text-white placeholder:text-gray-500"
               />
             </div>

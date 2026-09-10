@@ -29,11 +29,12 @@ export type ExecuteCodeResult = {
 };
 
 function normalizeJudge0Result(raw: Judge0SubmissionResult): ExecuteCodeResult {
+  const decode = (value: string | null) => value ? Buffer.from(value, "base64").toString("utf8") : value;
   return {
-    stdout: raw.stdout ?? null,
-    stderr: raw.stderr ?? null,
-    compileOutput: raw.compile_output ?? null,
-    message: raw.message ?? null,
+    stdout: decode(raw.stdout),
+    stderr: decode(raw.stderr),
+    compileOutput: decode(raw.compile_output),
+    message: decode(raw.message),
     status: raw.status
       ? {
           id: raw.status.id,

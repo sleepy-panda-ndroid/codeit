@@ -45,3 +45,10 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 
   return res.json();
 }
+
+export async function apiDownload(path: string) {
+  const token = getToken();
+  const res = await fetch(`${API_BASE}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return { blob: await res.blob(), filename: res.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1] ?? "project.codeit.json" };
+}

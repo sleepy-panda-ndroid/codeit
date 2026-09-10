@@ -102,6 +102,13 @@ export function loadPersistedIdeState(projectId: string): PersistedIdeState | nu
       activeId: typeof parsed.activeId === "string" ? parsed.activeId : "",
       drafts: parsed.drafts && typeof parsed.drafts === "object" ? parsed.drafts as Record<string, string> : {},
       stdin: typeof parsed.stdin === "string" ? parsed.stdin : "",
+      panelSizes: parsed.panelSizes && typeof parsed.panelSizes === "object" ? {
+        sidebar: Number(parsed.panelSizes.sidebar) || 20,
+        editorWidth: Number(parsed.panelSizes.editorWidth) || 60,
+        editor: Number(parsed.panelSizes.editor) || 75,
+        terminal: Number(parsed.panelSizes.terminal) || 25,
+        aiPanel: Number(parsed.panelSizes.aiPanel) || 20,
+      } : undefined,
       layout: { showSidebar: parsed.layout?.showSidebar ?? true, showAIPanel: parsed.layout?.showAIPanel ?? true, showTerminal: parsed.layout?.showTerminal ?? true },
     };
   } catch { return null; }

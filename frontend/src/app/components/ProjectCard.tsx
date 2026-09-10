@@ -43,7 +43,7 @@ export default function ProjectCard({ project, onProjectUpdated, onProjectDelete
   };
 
   return (
-    <Card className="bg-[#252526] border-[#3e3e42] p-6 hover:border-indigo-500/50 transition-all group">
+    <Card className="bg-[#30343b] border-[#59616d] p-6 hover:border-cyan-500/60 transition-all group">
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1 mb-1">

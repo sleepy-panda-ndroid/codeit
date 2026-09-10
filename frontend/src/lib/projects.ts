@@ -1,4 +1,4 @@
-import { apiFetch } from "./api";
+import { apiDownload, apiFetch } from "./api";
 
 export type ProjectRole = "OWNER" | "WRITER" | "READER";
 export type ProjectVisibility = "PRIVATE" | "PUBLIC" | "UNLISTED";
@@ -127,4 +127,18 @@ export async function listPublicProjects() {
 
 export async function searchProjects(q: string) {
   return apiFetch<Project[]>(`/projects/search?q=${encodeURIComponent(q)}`);
+}
+
+export type ProjectAuditEntry = { id: string; action: string; targetType: string; targetId: string; targetName: string; details: Record<string, unknown>; createdAt: string; actor: { id: string; name: string; email: string } | null };
+export async function listProjectAudit(projectId: string) {
+  return apiFetch<ProjectAuditEntry[]>(`/projects/${projectId}/audit`);
+}
+export async function downloadProject(projectId: string) {
+  return apiDownload(`/projects/${projectId}/download`);
+}
+export async function uploadProject(projectId: string, projectPackage: unknown) {
+  return apiFetch<{ ok: true; nodeCount: number }>(`/projects/${projectId}/upload`, { method: "POST", body: JSON.stringify(projectPackage) });
+}
+export async function importProject(projectPackage: unknown) {
+  return apiFetch<Project>("/projects/import", { method: "POST", body: JSON.stringify(projectPackage) });
 }

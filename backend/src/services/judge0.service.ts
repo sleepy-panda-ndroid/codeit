@@ -4,6 +4,10 @@ type Judge0CreateSubmissionInput = {
   stdin?: string;
 };
 
+function encodeSubmission(value: string) {
+  return Buffer.from(value, "utf8").toString("base64");
+}
+
 type Judge0CreateSubmissionResponse = {
   token: string;
 };
@@ -119,10 +123,14 @@ export async function createSubmission(
   input: Judge0CreateSubmissionInput
 ): Promise<Judge0CreateSubmissionResponse> {
   return judge0Fetch<Judge0CreateSubmissionResponse>(
-    "/submissions?base64_encoded=false&wait=false",
+    "/submissions?base64_encoded=true&wait=false",
     {
       method: "POST",
-      body: JSON.stringify(input),
+      body: JSON.stringify({
+        ...input,
+        source_code: encodeSubmission(input.source_code),
+        stdin: input.stdin ? encodeSubmission(input.stdin) : undefined,
+      }),
     }
   );
 }
@@ -131,7 +139,7 @@ export async function getSubmission(
   token: string
 ): Promise<Judge0SubmissionResult> {
   return judge0Fetch<Judge0SubmissionResult>(
-    `/submissions/${token}?base64_encoded=false`
+    `/submissions/${token}?base64_encoded=true`
   );
 }
 

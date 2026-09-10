@@ -22,6 +22,7 @@ export function useProjectLoad(
   const [fileError, setFileError] = useState("");
   const [panelSizes, setPanelSizes] = useState<NonNullable<PersistedIdeState["panelSizes"]>>({
     sidebar: 20,
+    editorWidth: 60,
     editor: 60,
     terminal: 25,
     aiPanel: 20,
@@ -51,7 +52,7 @@ export function useProjectLoad(
         setShowAIPanel(persisted.layout.showAIPanel);
         setShowTerminal(persisted.layout.showTerminal);
         setStdin(persisted.stdin ?? "");
-        if (persisted.panelSizes) setPanelSizes(persisted.panelSizes);
+        if (persisted.panelSizes) setPanelSizes({ sidebar: 20, editorWidth: 60, editor: 75, terminal: 25, aiPanel: 20, ...persisted.panelSizes });
       }
 
       const fileNodes = allNodes.filter((node) => node.type === "file");

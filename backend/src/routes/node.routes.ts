@@ -7,6 +7,8 @@ import { requireProjectReadAccess } from "../middleware/requireProjectReadAccess
 import { NodeModel } from "../db/models/Node";
 import { normalizeNodeName } from "../utils/nodeName";
 import { removeRoom, roomKey } from "../ws/roomRegistry";
+import { recordProjectAudit } from "../services/projectAudit.service";
+import { assertProjectStorageAvailable } from "../services/projectQuota.service";
 
 export const nodeRouter = Router({ mergeParams: true });
 
@@ -92,6 +94,9 @@ nodeRouter.post(
     const projectId = req.params.id;
     const name = normalizeNodeName(parsed.data.name);
     if (!name) return res.status(400).json({ error: "Invalid name" });
+    const newBytes = parsed.data.type === "file" ? Buffer.byteLength(parsed.data.content ?? "", "utf8") : 0;
+    try { await assertProjectStorageAvailable(req.userId, newBytes); }
+    catch (error: any) { if (error?.code === "PROJECT_STORAGE_LIMIT") return res.status(413).json({ error: error.message }); throw error; }
 
     // Resolve and validate the parent folder (null = root)
     let parentId: mongoose.Types.ObjectId | null = null;
@@ -118,6 +123,7 @@ nodeRouter.post(
         name,
         content: parsed.data.type === "file" ? parsed.data.content ?? "" : "",
       });
+      await recordProjectAudit({ projectId, actorId: req.userId, action: "NODE_CREATED", targetType: created.type === "file" ? "FILE" : "FOLDER", targetId: String(created._id), targetName: created.name });
       res.status(201).json(toNode(created));
     } catch (e: any) {
       if (e?.code === 11000) {
@@ -141,6 +147,13 @@ nodeRouter.put(
     const parsed = saveSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
 
+    const current = await NodeModel.findOne({ _id: req.params.nodeId, projectId: req.params.id, type: "file" }).select("content").lean();
+    if (!current) return res.status(404).json({ error: "File not found" });
+    const deltaBytes = Buffer.byteLength(parsed.data.content, "utf8") - Buffer.byteLength(current.content ?? "", "utf8");
+    if (deltaBytes > 0) {
+      try { await assertProjectStorageAvailable(req.userId, deltaBytes); }
+      catch (error: any) { if (error?.code === "PROJECT_STORAGE_LIMIT") return res.status(413).json({ error: error.message }); throw error; }
+    }
     const updated = await NodeModel.findOneAndUpdate(
       { _id: req.params.nodeId, projectId: req.params.id, type: "file" },
       { $set: { content: parsed.data.content } },
@@ -148,6 +161,7 @@ nodeRouter.put(
     );
 
     if (!updated) return res.status(404).json({ error: "File not found" });
+    await recordProjectAudit({ projectId: req.params.id, actorId: req.userId, action: "NODE_UPDATED", targetType: "FILE", targetId: String(updated._id), targetName: updated.name });
     res.json({ ok: true, id: String(updated._id), updatedAt: updated.updatedAt });
   }
 );
@@ -167,12 +181,14 @@ nodeRouter.patch(
     if (!name) return res.status(400).json({ error: "Invalid name" });
 
     try {
+      const previousName = (await NodeModel.findOne({ _id: req.params.nodeId, projectId: req.params.id }).select("name").lean())?.name ?? "";
       const updated = await NodeModel.findOneAndUpdate(
         { _id: req.params.nodeId, projectId: req.params.id },
         { $set: { name } },
         { new: true }
       );
       if (!updated) return res.status(404).json({ error: "Node not found" });
+      await recordProjectAudit({ projectId: req.params.id, actorId: req.userId, action: "NODE_UPDATED", targetType: updated.type === "file" ? "FILE" : "FOLDER", targetId: String(updated._id), targetName: updated.name, details: { renamedFrom: previousName } });
       res.json(toNode(updated));
     } catch (e: any) {
       if (e?.code === 11000) {
@@ -197,15 +213,17 @@ nodeRouter.delete(
 
     if (node.type === "folder") {
       const ids = await collectSubtreeIds(projectId, node._id);
-      const files = await NodeModel.find({ _id: { $in: ids }, projectId, type: "file" })
-        .select("_id")
+      const deletedNodes = await NodeModel.find({ _id: { $in: ids }, projectId })
+        .select("_id name type")
         .lean();
       await NodeModel.deleteMany({ _id: { $in: ids } });
-      files.forEach((file) => removeRoom(roomKey(projectId, String(file._id))));
+      await recordProjectAudit({ projectId, actorId: req.userId, action: "NODE_DELETED", targetType: "FOLDER", targetId: String(node._id), targetName: node.name, details: { deletedCount: ids.length, deletedNodes: deletedNodes.map((deletedNode: any) => ({ id: String(deletedNode._id), name: deletedNode.name, type: deletedNode.type })) } });
+      deletedNodes.filter((deletedNode: any) => deletedNode.type === "file").forEach((file: any) => removeRoom(roomKey(projectId, String(file._id))));
       return res.json({ ok: true, deletedCount: ids.length });
     }
 
     await NodeModel.deleteOne({ _id: node._id });
+    await recordProjectAudit({ projectId, actorId: req.userId, action: "NODE_DELETED", targetType: "FILE", targetId: String(node._id), targetName: node.name });
     removeRoom(roomKey(projectId, String(node._id)));
     res.json({ ok: true, deletedCount: 1 });
   }
@@ -265,8 +283,10 @@ nodeRouter.patch(
     }
 
     try {
+      const previousParentId = node.parentId ? String(node.parentId) : null;
       node.parentId = newParentId;
       await node.save();
+      await recordProjectAudit({ projectId, actorId: req.userId, action: "NODE_MOVED", targetType: node.type === "file" ? "FILE" : "FOLDER", targetId: String(node._id), targetName: node.name, details: { previousParentId, parentId: parsed.data.parentId } });
       res.json(toNode(node));
     } catch (e: any) {
       if (e?.code === 11000) {
