@@ -9,6 +9,10 @@ import { Notification } from "../db/models/Notification";
 import { requireProjectReadAccess } from "../middleware/requireProjectReadAccess";
 import mongoose from "mongoose";
 import { removeRoomsForProject } from "../ws/roomRegistry";
+import archiver = require("archiver");
+import { ProjectAuditLog } from "../db/models/ProjectAuditLog";
+import { recordProjectAudit } from "../services/projectAudit.service";
+import { assertProjectStorageAvailable } from "../services/projectQuota.service";
 
 export const projectRouter = Router();
 const createSchema = z.object({
@@ -19,6 +23,11 @@ const createSchema = z.object({
 const patchSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   visibility: z.enum(["PRIVATE", "PUBLIC", "UNLISTED"]).optional(),
+});
+const projectImportSchema = z.object({
+  format: z.literal("codeit-project"), version: z.literal(1),
+  project: z.object({ name: z.string().min(1).max(100), description: z.string().max(2000).optional() }),
+  nodes: z.array(z.object({ id: z.string(), parentId: z.string().nullable(), type: z.enum(["file", "folder"]), name: z.string().min(1).max(255), content: z.string().optional() })).max(10000),
 });
 
 // Create project
@@ -39,6 +48,7 @@ projectRouter.post("/", authJwt, async (req: any, res) => {
         [{ projectId: created._id, userId: req.userId, role: "OWNER", status: "ACCEPTED" }],
         { session }
       );
+      await recordProjectAudit({ projectId: String(created._id), actorId: req.userId, action: "PROJECT_CREATED", targetType: "PROJECT", targetId: String(created._id), targetName: created.name });
       project = created;
     });
     res.status(201).json(project);
@@ -47,6 +57,21 @@ projectRouter.post("/", authJwt, async (req: any, res) => {
   } finally {
     session.endSession();
   }
+});
+
+projectRouter.post("/import", authJwt, async (req: any, res) => {
+  const parsed = projectImportSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid project package" });
+  const importedBytes = parsed.data.nodes.reduce((total, node) => total + Buffer.byteLength(node.type === "file" ? node.content ?? "" : "", "utf8"), 0);
+  try { await assertProjectStorageAvailable(req.userId, importedBytes); }
+  catch (error: any) { if (error?.code === "PROJECT_STORAGE_LIMIT") return res.status(413).json({ error: error.message }); throw error; }
+  const [project] = await Project.create([{ name: parsed.data.project.name, description: parsed.data.project.description ?? "", visibility: "PRIVATE" }]);
+  await ProjectAccess.create({ projectId: project._id, userId: req.userId, role: "OWNER", status: "ACCEPTED" });
+  const idMap = new Map<string, mongoose.Types.ObjectId>();
+  for (const node of parsed.data.nodes) idMap.set(node.id, new mongoose.Types.ObjectId());
+  await NodeModel.insertMany(parsed.data.nodes.map((node) => ({ _id: idMap.get(node.id), projectId: project._id, parentId: node.parentId ? idMap.get(node.parentId) ?? null : null, type: node.type, name: node.name, content: node.type === "file" ? node.content ?? "" : "" })));
+  await recordProjectAudit({ projectId: String(project._id), actorId: req.userId, action: "PROJECT_CREATED", targetType: "PROJECT", targetId: String(project._id), targetName: project.name, details: { imported: true, nodeCount: parsed.data.nodes.length } });
+  res.status(201).json(project);
 });
 
 // List all accessible projects
@@ -224,6 +249,7 @@ projectRouter.patch(
       return res.status(404).json({ error: "Project not found" });
     }
 
+    await recordProjectAudit({ projectId: req.params.id, actorId: req.userId, action: "PROJECT_UPDATED", targetType: "PROJECT", targetId: req.params.id, targetName: updated.name, details: parsed.data });
     res.json(updated);
   }
 );
@@ -242,6 +268,7 @@ projectRouter.delete(
       ProjectAccess.deleteMany({ projectId }),
       NodeModel.deleteMany({ projectId }),
       Notification.deleteMany({ projectId }),
+      ProjectAuditLog.deleteMany({ projectId }),
     ]);
 
     res.json({ ok: true });
@@ -249,19 +276,53 @@ projectRouter.delete(
 );
 
 // Get single project detail + current user's role
-projectRouter.get(
-  "/:id",
-  authJwt,
-  requireProjectReadAccess(),
-  async (req: any, res) => {
-    const project = await Project.findById(req.params.id);
-    if (!project) {
-      return res.status(404).json({ error: "Project not found" });
-    }
+projectRouter.get("/:id", authJwt, requireProjectReadAccess(), async (req: any, res) => {
+  const project = await Project.findById(req.params.id);
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  res.json({ project, role: req.projectRole });
+});
 
-    res.json({
-      project,
-      role: req.projectRole,
-    });
-  }
-);
+projectRouter.get("/:id/audit", authJwt, requireProjectReadAccess(), async (req: any, res) => {
+  const entries = await ProjectAuditLog.find({ projectId: req.params.id }).populate("actorId", "name email").sort({ createdAt: -1 }).limit(1000).lean();
+  res.json(entries.map((entry: any) => ({ id: String(entry._id), action: entry.action, targetType: entry.targetType, targetId: entry.targetId, targetName: entry.targetName, details: entry.details, createdAt: entry.createdAt, actor: entry.actorId ? { id: String(entry.actorId._id), name: entry.actorId.name, email: entry.actorId.email } : null })));
+});
+
+projectRouter.get("/:id/download", authJwt, requireProjectReadAccess(), async (req: any, res) => {
+  const project = await Project.findById(req.params.id).lean();
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  const nodes = await NodeModel.find({ projectId: req.params.id }).select("_id parentId type name content").lean();
+  const byParent = new Map<string, any[]>();
+  nodes.forEach((node: any) => { const key = node.parentId ? String(node.parentId) : "root"; byParent.set(key, [...(byParent.get(key) ?? []), node]); });
+  const archive = new archiver.ZipArchive({ zlib: { level: 9 } });
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${String(project.name).replace(/[^a-z0-9_-]+/gi, "-") || "project"}.zip"`);
+  archive.on("error", (error: Error) => res.destroy(error));
+  const addNodes = (parentId: string, prefix: string) => {
+    for (const node of byParent.get(parentId) ?? []) {
+      const path = `${prefix}${node.name}`;
+      if (node.type === "folder") { archive.append("", { name: `${path}/.keep` }); addNodes(String(node._id), `${path}/`); }
+      else archive.append(node.content ?? "", { name: path });
+    }
+  };
+  archive.pipe(res);
+  addNodes("root", "");
+  await archive.finalize();
+});
+
+projectRouter.post("/:id/upload", authJwt, requireProjectRole(["OWNER", "WRITER"]), async (req: any, res) => {
+  const parsed = projectImportSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid project package" });
+  const projectId = req.params.id;
+  const importedBytes = parsed.data.nodes.reduce((total, node) => total + Buffer.byteLength(node.type === "file" ? node.content ?? "" : "", "utf8"), 0);
+  const existingNodes = await NodeModel.find({ projectId, type: "file" }).select("content").lean();
+  const existingBytes = existingNodes.reduce((total, node: any) => total + Buffer.byteLength(node.content ?? "", "utf8"), 0);
+  try { await assertProjectStorageAvailable(req.userId, Math.max(0, importedBytes - existingBytes)); }
+  catch (error: any) { if (error?.code === "PROJECT_STORAGE_LIMIT") return res.status(413).json({ error: error.message }); throw error; }
+  await NodeModel.deleteMany({ projectId });
+  const idMap = new Map<string, mongoose.Types.ObjectId>();
+  for (const node of parsed.data.nodes) idMap.set(node.id, new mongoose.Types.ObjectId());
+  await NodeModel.insertMany(parsed.data.nodes.map((node) => ({ _id: idMap.get(node.id), projectId, parentId: node.parentId ? idMap.get(node.parentId) ?? null : null, type: node.type, name: node.name, content: node.type === "file" ? node.content ?? "" : "" })));
+  const project = await Project.findByIdAndUpdate(projectId, { $set: { name: parsed.data.project.name, description: parsed.data.project.description ?? "" } }, { new: true });
+  await recordProjectAudit({ projectId, actorId: req.userId, action: "PROJECT_IMPORTED", targetType: "PROJECT", targetId: projectId, targetName: project?.name ?? parsed.data.project.name, details: { nodeCount: parsed.data.nodes.length } });
+  res.json({ ok: true, nodeCount: parsed.data.nodes.length });
+});
