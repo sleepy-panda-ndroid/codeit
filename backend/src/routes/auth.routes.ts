@@ -4,23 +4,18 @@ import { z } from "zod";
 import { User } from "../db/models/User";
 import { hashPassword, verifyPassword, signJwt } from "../services/auth.service";
 import { authJwt } from "../middleware/authJwt";
-import { authLimiter } from "../middleware/rateLimit";
+import { authLimiter, searchLimiter } from "../middleware/rateLimit";
 import { Project } from "../db/models/Project";
 import { ProjectAccess } from "../db/models/ProjectAccess";
 
 export const authRouter = Router();
 
 const DEFAULT_USER_PREFERENCES = {
-  theme: "dark",
   fontSize: "14",
   tabSize: "2",
   autoSave: true,
   formatOnSave: false,
   minimap: true,
-  notifications: true,
-  emailNotifications: false,
-  collaborationUpdates: true,
-  errorAlerts: true,
 } as const;
 
 function normalizeUserPreferences(preferences: any) {
@@ -150,7 +145,7 @@ authRouter.put("/profile", authJwt, async (req: any, res) => {
   return res.json(toAuthUser(user));
 });
 
-authRouter.get("/users/search", authJwt, async (req: any, res) => {
+authRouter.get("/users/search", searchLimiter, authJwt, async (req: any, res) => {
   const q = String(req.query.q ?? "").trim();
   if (!q) return res.json([]);
   const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -161,15 +156,18 @@ authRouter.get("/users/search", authJwt, async (req: any, res) => {
       { name: { $regex: escaped, $options: "i" } },
       { email: { $regex: escaped, $options: "i" } },
     ],
-  }).select("_id name email bio avatarDataUrl").limit(50).lean();
+  }).select("_id name bio avatarDataUrl").limit(50).lean();
+  // Note: users can still be *found* by searching their email (matches server-side
+  // above), but the email address itself is never echoed back in the response —
+  // it's not needed to identify or link to a profile, only to search for one.
   res.json(users.map((user: any) => ({
-    id: String(user._id), name: user.name, email: user.email,
+    id: String(user._id), name: user.name,
     bio: user.bio ?? "", avatarDataUrl: user.avatarDataUrl ?? "",
   })));
 });
 
 authRouter.get("/users/:id", authJwt, async (req: any, res) => {
-  const user = await User.findById(req.params.id).select("_id name email bio avatarDataUrl profileVisibility").lean() as any;
+  const user = await User.findById(req.params.id).select("_id name bio avatarDataUrl profileVisibility").lean() as any;
   if (!user) return res.status(404).json({ error: "User not found" });
   const isSelf = String(user._id) === String(req.userId);
   if (!isSelf && user.profileVisibility !== "PUBLIC") return res.status(404).json({ error: "User not found" });
@@ -189,7 +187,7 @@ authRouter.get("/users/:id", authJwt, async (req: any, res) => {
   const serialize = (projects: any[]) => projects.map((project: any) => ({ ...project, _id: String(project._id) }));
 
   res.json({
-    user: { id: String(user._id), name: user.name, email: user.email, bio: user.bio ?? "", avatarDataUrl: user.avatarDataUrl ?? "" },
+    user: { id: String(user._id), name: user.name, bio: user.bio ?? "", avatarDataUrl: user.avatarDataUrl ?? "" },
     projects: serialize(visibleProjects),
     ownedProjects: serialize(owned),
     collaboratedProjects: serialize(collaborated),
@@ -217,16 +215,11 @@ authRouter.put("/avatar", authJwt, async (req: any, res) => {
 });
 
 const updatePreferencesSchema = z.object({
-  theme: z.enum(["dark", "light", "auto"]),
   fontSize: z.string(),
   tabSize: z.string(),
   autoSave: z.boolean(),
   formatOnSave: z.boolean(),
   minimap: z.boolean(),
-  notifications: z.boolean(),
-  emailNotifications: z.boolean(),
-  collaborationUpdates: z.boolean(),
-  errorAlerts: z.boolean(),
 });
 
 authRouter.put("/preferences", authJwt, async (req: any, res) => {

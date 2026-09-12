@@ -4,7 +4,8 @@ import { z } from "zod";
 import { authJwt } from "../middleware/authJwt";
 import { requireProjectRole } from "../middleware/requireProjectRole";
 import { executeCode } from "../services/execution.service";
-import { executeLimiter } from "../middleware/rateLimit";
+import { executeLimiter, cphLimiter } from "../middleware/rateLimit";
+import { parseProblemQuery, getCodeforcesSamples } from "../services/codeforces.service";
 
 export const executionRouter = Router();
 
@@ -15,39 +16,16 @@ const executeSchema = z.object({
   filePath: z.string().optional(),
 });
 
-function decodeHtml(value: string) {
-  return value.replace(/<br\s*\/?>(\r?\n)?/gi, "\n").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
-}
-
-function parseMarkdownSamples(markdown: string) {
-  const exampleStart = markdown.search(/\nExample\s+\n/i);
-  if (exampleStart < 0) return [];
-  const example = markdown.slice(exampleStart);
-  const inputMatch = example.match(/\nInput\s+\n+.*?\n([\s\S]*?)\nOutput\s+\n+/i);
-  const outputMatch = example.match(/\nOutput\s+\n+.*?\n([\s\S]*?)(?:\nNote\s+\n|$)/i);
-  if (!inputMatch || !outputMatch) return [];
-  const input = inputMatch[1].replace(/\nCopy\s*\n/gi, "\n").trim();
-  const output = outputMatch[1].replace(/\nCopy\s*\n/gi, "\n").trim();
-  return [{ input, output }];
-}
-
-executionRouter.get("/projects/:id/cph/samples", authJwt, requireProjectRole(["OWNER", "WRITER", "READER"]), async (req: any, res, next) => {
+executionRouter.get("/projects/:id/cph/samples", cphLimiter, authJwt, requireProjectRole(["OWNER", "WRITER", "READER"]), async (req: any, res, next) => {
   try {
-    const raw = String(req.query.problem ?? "").trim();
-    const match = raw.match(/(?:problemset\/problem|contest)\/(\d+)(?:\/problem\/)?([A-Za-z]\d*)?/i) ?? raw.match(/^(\d+)\s*([A-Za-z]\d*)?$/i);
-    if (!match) return res.status(400).json({ error: "Enter a Codeforces problem URL or contest number and problem letter" });
-    const contestId = match[1];
-    const index = match[2] ?? "A";
-    const url = `https://codeforces.com/problemset/problem/${contestId}/${index}`;
-    const response = await fetch(url);
-    const source = response.ok ? await response.text() : await fetch(`https://r.jina.ai/http://codeforces.com/problemset/problem/${contestId}/${index}`).then(async (fallback) => { if (!fallback.ok) throw new Error("Codeforces problem could not be loaded"); return fallback.text(); });
-    const blocks = (source.match(/<div class="input">[\s\S]*?<pre>([\s\S]*?)<\/pre>[\s\S]*?<div class="output">[\s\S]*?<pre>([\s\S]*?)<\/pre>/gi) ?? []).map((block) => {
-      const input = block.match(/<div class="input">[\s\S]*?<pre>([\s\S]*?)<\/pre>/i)?.[1] ?? "";
-      const output = block.match(/<div class="output">[\s\S]*?<pre>([\s\S]*?)<\/pre>/i)?.[1] ?? "";
-      return { input: decodeHtml(input), output: decodeHtml(output) };
-    });
-    const tests = blocks.length ? blocks : parseMarkdownSamples(source);
+    const raw = String(req.query.problem ?? "");
+    const parsedQuery = parseProblemQuery(raw);
+    if (!parsedQuery) return res.status(400).json({ error: "Enter a Codeforces problem URL or contest number and problem letter" });
+
+    const { contestId, index } = parsedQuery;
+    const tests = await getCodeforcesSamples(contestId, index);
     if (!tests.length) return res.status(404).json({ error: "No sample tests found" });
+
     res.json({ problem: `${contestId}${index}`, tests });
   } catch (error) { next(error); }
 });

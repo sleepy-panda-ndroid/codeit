@@ -76,7 +76,7 @@ export async function updateProfile(input: { name: string; email: string; bio?: 
   });
 }
 
-export type PublicUser = { id: string; name: string; email: string; bio: string; avatarDataUrl: string };
+export type PublicUser = { id: string; name: string; bio: string; avatarDataUrl: string };
 export async function searchUsers(q: string) {
   return apiFetch<PublicUser[]>(`/auth/users/search?q=${encodeURIComponent(q)}`);
 }

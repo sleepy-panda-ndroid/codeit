@@ -228,7 +228,7 @@ export default function Dashboard() {
         ))}
         {query && searchType === "profiles" && userResults.map((person) => (
           <Card key={person.id} className="bg-[#30343b] border-[#59616d] p-5">
-            <a href={`/app/profile/${person.id}`} className="flex items-center gap-3 text-white hover:text-cyan-300"><Avatar><AvatarImage src={person.avatarDataUrl} /><AvatarFallback className="bg-cyan-700"><Code2 className="w-4 h-4" /></AvatarFallback></Avatar><span><span className="block font-medium">{person.name || "Unnamed user"}</span><span className="block text-sm text-gray-300">{person.email}</span></span></a>
+            <a href={`/app/profile/${person.id}`} className="flex items-center gap-3 text-white hover:text-cyan-300"><Avatar><AvatarImage src={person.avatarDataUrl} /><AvatarFallback className="bg-cyan-700"><Code2 className="w-4 h-4" /></AvatarFallback></Avatar><span className="font-medium">{person.name || "Unnamed user"}</span></a>
           </Card>
         ))}
       </div>

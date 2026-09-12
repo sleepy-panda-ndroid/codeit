@@ -419,21 +419,6 @@ export default function SettingsPage() {
               <div className="mt-8 pt-6 border-t border-[#3e3e42]">
                 <p className="text-xs text-gray-500 mt-3">Use Save Changes to persist this setting to your account.</p>
               </div>
-
-              <div className="mt-8 pt-6 border-t border-[#3e3e42]">
-                <h3 className="font-semibold text-white mb-4">Active Sessions</h3>
-                <div className="space-y-3">
-                  <div className="p-4 bg-[#1e1e1e] rounded-lg border border-[#3e3e42]">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-white font-medium">Current Session</p>
-                        <p className="text-sm text-gray-400">Chrome on macOS • New York, USA</p>
-                      </div>
-                      <span className="text-xs text-green-400">Active</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </Card>
           </TabsContent>
         </Tabs>

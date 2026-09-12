@@ -356,7 +356,7 @@ function AutoSaveSection({ settings, set }: { settings: EditorSettings; set: <K 
       </SettingRow>
 
       <SectionTitle>On Save Actions</SectionTitle>
-      <SettingRow label="Format on Save" description="Run code formatter when saving a file.">
+      <SettingRow label="Trim Trailing Whitespace" description="Remove trailing whitespace from each line when saving.">
         <Toggle checked={settings.formatOnSave} onChange={(v) => set("formatOnSave", v)} />
       </SettingRow>
     </div>
@@ -370,7 +370,7 @@ function AboutSection() {
     ["Ctrl+B", "Toggle file explorer"],
     ["Ctrl+J", "Toggle terminal"],
     ["Alt+W", "Close active tab"],
-    ["Alt+Tab", "Switch to next tab"],
+    ["Ctrl+]", "Switch to next tab"],
     ["Ctrl+,", "Open editor settings"],
   ];
 
@@ -403,24 +403,6 @@ function AboutSection() {
             <span className="text-xs text-gray-400">{label}</span>
             <kbd className="px-2 py-0.5 bg-[#3c3c3c] border border-[#5a5a5e] rounded text-gray-300 text-[10px] font-mono">{key}</kbd>
           </div>
-        ))}
-      </div>
-
-      <SectionTitle>Support</SectionTitle>
-      <div className="grid grid-cols-2 gap-2.5">
-        {[
-          { label: "Documentation", sub: "Read the full docs" },
-          { label: "Changelog",     sub: "See what's new" },
-          { label: "Report a bug",  sub: "Help improve codeIT" },
-          { label: "Community",     sub: "Join the Discord" },
-        ].map((item) => (
-          <button
-            key={item.label}
-            className="text-left p-3.5 bg-[#252526] hover:bg-[#2a2d2e] border border-[#3e3e42] hover:border-[#5a5a5e] rounded-xl transition-colors"
-          >
-            <p className="text-sm text-gray-200">{item.label}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{item.sub}</p>
-          </button>
         ))}
       </div>
     </div>
