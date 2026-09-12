@@ -145,6 +145,18 @@ function isModelDownError(
   return /model.*(down|unavailable|not found|not available|decommissioned)|does not exist/.test(value);
 }
 
+// Not every model on the provider supports the reasoning_format parameter —
+// Groq rejects the request outright (rather than ignoring the field) for
+// models like groq-compound-mini that don't support it, with an error
+// message to that effect. Rather than hardcoding a list of which specific
+// models do/don't support it (which would go stale as the provider's model
+// roster changes), detect this specific rejection and retry the same model
+// once without the parameter.
+function isReasoningFormatUnsupportedError(message: string): boolean {
+  const value = message.toLowerCase();
+  return value.includes("reasoning_format") || (value.includes("reasoning format") && /not (available|supported)/.test(value));
+}
+
 export async function listAIModels(): Promise<{ models: string[]; defaultModel: string }> {
   const { apiKey, baseUrl, defaultModel } = getProviderConfig();
 
@@ -222,13 +234,25 @@ export async function requestAIChat(input: AIChatInput): Promise<AIChatResult> {
   messages.push({ role: "system", content: "Answer with minimal tokens while remaining correct." });
   messages.push(...input.messages.slice(-12));
 
-  const requestModel = async (requestModelId: string): Promise<string> => {
-    const requestBody = {
+  const requestModel = async (requestModelId: string, includeReasoningFormat: boolean): Promise<string> => {
+    const requestBody: Record<string, unknown> = {
       model: requestModelId,
       messages,
       temperature: input.temperature ?? 0.3,
       max_tokens: input.maxTokens,
     };
+
+    if (includeReasoningFormat) {
+      // Ask reasoning-capable models (e.g. the Qwen3 family) to return only
+      // the final answer. Without this, Groq defaults to "raw", which embeds
+      // the model's full <think>...</think> trace directly in the response
+      // content. Not every model supports this parameter though — Groq
+      // rejects the request outright for ones that don't, which is handled
+      // below by retrying without it. The regex strip further down is kept
+      // as a defensive fallback for any provider/model that ignores this
+      // parameter rather than rejecting or honoring it.
+      requestBody.reasoning_format = "hidden";
+    }
 
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
@@ -252,6 +276,11 @@ export async function requestAIChat(input: AIChatInput): Promise<AIChatResult> {
       const providerErrorType = data?.error?.type;
       const providerErrorCode = data?.error?.code;
       const message = providerError || `AI provider request failed (${response.status})`;
+
+      if (includeReasoningFormat && isReasoningFormatUnsupportedError(message)) {
+        return requestModel(requestModelId, false);
+      }
+
       if (isModelDownError(response.status, message, providerErrorType, providerErrorCode)) {
         throw new ModelUnavailableError();
       }
@@ -265,16 +294,27 @@ export async function requestAIChat(input: AIChatInput): Promise<AIChatResult> {
     return reply;
   };
 
+  // Try the requested model first, without fetching the full model list — that
+  // list is only needed to build a fallback order, and fetching it costs an
+  // extra request to the provider on every single chat message if done
+  // unconditionally. Only pay that cost when the first attempt actually fails.
+  try {
+    const reply = await requestModel(model, true);
+    return { reply };
+  } catch (err) {
+    if (!(err instanceof ModelUnavailableError)) throw err;
+  }
+
   const available = await listAIModels();
-  const candidates = Array.from(new Set([model, defaultModel, ...available.models].filter(Boolean)));
+  const candidates = Array.from(
+    new Set([defaultModel, ...available.models].filter((candidate) => Boolean(candidate) && candidate !== model))
+  );
   let lastUnavailableError: ModelUnavailableError | null = null;
 
   for (const candidate of candidates) {
     try {
-      const reply = await requestModel(candidate);
-      return candidate === model
-        ? { reply }
-        : { reply, fallbackFrom: model, fallbackTo: candidate };
+      const reply = await requestModel(candidate, true);
+      return { reply, fallbackFrom: model, fallbackTo: candidate };
     } catch (err) {
       if (!(err instanceof ModelUnavailableError)) throw err;
       lastUnavailableError = err;

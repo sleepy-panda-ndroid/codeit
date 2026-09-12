@@ -34,17 +34,8 @@ const STATUS_CONFIG: Record<
 };
 
 export default function TerminalPanel({ onClose, isRunning, executionResult, stdin = "", onStdinChange, onClearOutput }: TerminalPanelProps) {
-  const [activeTab, setActiveTab] = useState("terminal");
+  const [activeTab, setActiveTab] = useState("output");
   const [copied, setCopied] = useState(false);
-  const [terminalLines] = useState([
-    { type: "info",    text: "> npm start" },
-    { type: "success", text: "Compiled successfully!" },
-    { type: "info",    text: "" },
-    { type: "info",    text: "Local:           http://localhost:3000" },
-    { type: "info",    text: "On Your Network: http://192.168.1.100:3000" },
-    { type: "info",    text: "" },
-    { type: "success", text: "webpack compiled successfully" },
-  ]);
   const outputScrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-switch to output tab when execution starts or result arrives
@@ -66,16 +57,6 @@ export default function TerminalPanel({ onClose, isRunning, executionResult, std
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
-  };
-
-  const getTextColor = (type: string) => {
-    switch (type) {
-      case "error":   return "text-red-400";
-      case "success": return "text-green-400";
-      case "warning": return "text-yellow-400";
-      case "output":  return "text-blue-300";
-      default:        return "text-gray-300";
-    }
   };
 
   const formatTime = (ms: number) => {
@@ -166,13 +147,6 @@ export default function TerminalPanel({ onClose, isRunning, executionResult, std
         <div className="flex items-center justify-between border-b border-[#3e3e42] px-2">
           <TabsList className="bg-transparent h-9">
             <TabsTrigger
-              value="terminal"
-              className="data-[state=active]:bg-[#2a2d2e] text-gray-400 data-[state=active]:text-white text-xs h-7"
-            >
-              <Terminal className="w-3 h-3 mr-1.5" />
-              Terminal
-            </TabsTrigger>
-            <TabsTrigger
               value="input"
               className="data-[state=active]:bg-[#2a2d2e] text-gray-400 data-[state=active]:text-white text-xs h-7"
             >
@@ -220,15 +194,6 @@ export default function TerminalPanel({ onClose, isRunning, executionResult, std
             </Button>
           </div>
         </div>
-
-        <TabsContent
-          value="terminal"
-          className="flex-1 m-0 flex items-center justify-center"
-        >
-          <div className="text-gray-500 text-sm">
-            Terminal will be implemented later
-          </div>
-        </TabsContent>
 
         <TabsContent value="input" className="flex-1 overflow-hidden m-0 flex flex-col">
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#3e3e42] bg-[#252526]">

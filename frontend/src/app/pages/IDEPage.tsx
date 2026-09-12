@@ -72,28 +72,10 @@ function loadEditorDashboardSettings(): EditorSettings {
       return DEFAULT_EDITOR_SETTINGS;
     }
 
-    const parsed = JSON.parse(raw) as Partial<EditorSettings> & {
-      autoSaveEnabled?: boolean;
-      renderWhitespace?: EditorSettings["renderWhitespace"] | boolean;
-    };
-
-    const migrated: Partial<EditorSettings> = {
-      ...parsed,
-      autoSave:
-        typeof parsed.autoSave === "boolean"
-          ? parsed.autoSave
-          : typeof parsed.autoSaveEnabled === "boolean"
-          ? parsed.autoSaveEnabled
-          : DEFAULT_EDITOR_SETTINGS.autoSave,
-    };
-
-    if (typeof parsed.renderWhitespace === "boolean") {
-      migrated.renderWhitespace = parsed.renderWhitespace ? "all" : "none";
-    }
-
+    const parsed = JSON.parse(raw) as Partial<EditorSettings>;
     return {
       ...DEFAULT_EDITOR_SETTINGS,
-      ...migrated,
+      ...parsed,
     };
   } catch {
     return DEFAULT_EDITOR_SETTINGS;
@@ -467,7 +449,7 @@ export default function IDEPage() {
                     <p>Ctrl+S · Save &nbsp;&nbsp; Ctrl+Enter · Run</p>
                     <p>Ctrl+B · Sidebar &nbsp;&nbsp; Ctrl+J · Terminal</p>
                     <p>Ctrl+, · Settings</p>
-                    <p>Alt+W · Close tab &nbsp;&nbsp; Alt+Tab · Next tab</p>
+                    <p>Alt+W · Close tab &nbsp;&nbsp; Ctrl+] · Next tab</p>
                   </div>
                 </div>
               </div>

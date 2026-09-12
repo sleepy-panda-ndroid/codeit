@@ -17,6 +17,13 @@ import { handleCollabConnection } from "./ws/collabHandler";
 dotenv.config();
 const app = express();
 
+// Trust the first proxy hop (Azure App Service, or any standard reverse proxy /
+// load balancer in front of this app). Without this, express-rate-limit and
+// req.ip fall back to the proxy's own address for every request, collapsing all
+// users behind it into a single shared rate-limit bucket. Adjust the hop count
+// if this ends up deployed behind more than one proxy layer.
+app.set("trust proxy", 1);
+
 const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || "http://localhost:5173,http://localhost:4173,http://localhost:3000").split(",").map((value) => value.trim()).filter(Boolean);
 
 app.use(cors({
