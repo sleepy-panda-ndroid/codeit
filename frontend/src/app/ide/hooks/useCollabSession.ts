@@ -4,12 +4,15 @@ import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from "y-protoc
 import { apiFetch } from "../../../lib/api";
 import { getStoredToken, getStoredUser } from "../../../lib/auth";
 import type { CollaboratorPresence, CollabStatus } from "../ideTypes";
-import { buildCollabWsUrl, hashToColor, toCollaborators } from "../ideUtils";
+import { buildCollabWsUrl, toCollaborators } from "../ideUtils";
 
 const DOC_UPDATE = 0;
 const AWARENESS_UPDATE = 1;
 
 type UpdateActiveContent = (value: string) => void;
+
+type HelloAck = { type: "hello-ack"; color: string; onlineCount?: number };
+type PresenceMessage = { type: "presence"; onlineCount: number };
 
 export function useCollabSession(
   projectId: string | undefined,
@@ -19,38 +22,50 @@ export function useCollabSession(
 ) {
   const [collabStatus, setCollabStatus] = useState<CollabStatus>("idle");
   const [collaborators, setCollaborators] = useState<CollaboratorPresence[]>([]);
+  const [onlineCount, setOnlineCount] = useState(0);
+  const [collabText, setCollabText] = useState<Y.Text | null>(null);
+  const [collabAwareness, setCollabAwareness] = useState<Awareness | null>(null);
   const collabDocRef = useRef<Y.Doc | null>(null);
   const collabTextRef = useRef<Y.Text | null>(null);
   const collabAwarenessRef = useRef<Awareness | null>(null);
   const collabSocketRef = useRef<WebSocket | null>(null);
   const collabReadyRef = useRef(false);
+
   useEffect(() => {
     const activeFileIdValue = activeFileId;
     let disposed = false;
 
-    if (!projectId || !activeFileIdValue || loading) {
+    const cleanupCurrent = () => {
       collabSocketRef.current?.close();
       collabSocketRef.current = null;
+      collabAwarenessRef.current?.destroy();
+      collabAwarenessRef.current = null;
       collabDocRef.current?.destroy();
       collabDocRef.current = null;
       collabTextRef.current = null;
-      collabAwarenessRef.current?.destroy();
-      collabAwarenessRef.current = null;
       collabReadyRef.current = false;
-      setCollabStatus("idle");
+      setCollabText(null);
+      setCollabAwareness(null);
       setCollaborators([]);
+      setOnlineCount(0);
+    };
+
+    if (!projectId || !activeFileIdValue || loading) {
+      cleanupCurrent();
+      setCollabStatus("idle");
       return;
     }
 
     const token = getStoredToken();
     const user = getStoredUser();
     if (!token || !user) {
+      cleanupCurrent();
       setCollabStatus("error");
       return;
     }
 
+    cleanupCurrent();
     setCollabStatus("connecting");
-    setCollaborators([]);
 
     let doc: Y.Doc | null = null;
     let text: Y.Text | null = null;
@@ -72,57 +87,61 @@ export function useCollabSession(
         collabTextRef.current = text;
         collabAwarenessRef.current = awareness;
         collabSocketRef.current = socket;
+        setCollabText(text);
+        setCollabAwareness(awareness);
         collabReadyRef.current = false;
 
         const refreshCollaborators = () => {
-          if (!awareness) return;
-          setCollaborators(toCollaborators(awareness));
+          if (awareness) setCollaborators(toCollaborators(awareness));
         };
 
-        const syncActiveFileContent = () => {
-          if (!text) return;
-          const nextValue = text.toString();
-          updateActiveContent(nextValue);
-        };
-
-        const localPresence = {
-          userId: user.id,
-          name: user.name,
-          email: user.email,
-          color: hashToColor(user.id),
-        };
-
-        const sendLocalPresence = () => {
+        const sendAwareness = () => {
           if (!socket || socket.readyState !== WebSocket.OPEN || !awareness || !doc) return;
-          socket.send(JSON.stringify({ type: "hello", clientId: doc.clientID, name: user.name, email: user.email }));
-          awareness.setLocalState(localPresence);
-          socket.send(new Uint8Array([1, ...Array.from(encodeAwarenessUpdate(awareness, [doc.clientID]))]));
+          const update = encodeAwarenessUpdate(awareness, [doc.clientID]);
+          socket.send(new Uint8Array([AWARENESS_UPDATE, ...Array.from(update)]));
         };
-
-        text.observe(() => {
-          syncActiveFileContent();
-          refreshCollaborators();
-        });
 
         doc.on("update", (update: Uint8Array, origin: unknown) => {
           if (origin === "remote") return;
           if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(new Uint8Array([0, ...Array.from(update)]));
+            socket.send(new Uint8Array([DOC_UPDATE, ...Array.from(update)]));
           }
         });
 
-        awareness.on("update", () => {
+        awareness.on("update", (_changes, origin) => {
           refreshCollaborators();
+          if (origin !== "remote") sendAwareness();
         });
 
         socket.onopen = () => {
-          if (disposed) return;
+          if (disposed || !doc || !socket) return;
           setCollabStatus("syncing");
-          sendLocalPresence();
+          socket.send(JSON.stringify({ type: "hello", clientId: doc.clientID, name: user.name, email: user.email }));
         };
 
         socket.onmessage = (event) => {
-          if (!doc || !awareness || typeof event.data === "string") return;
+          if (!doc || !awareness) return;
+
+          if (typeof event.data === "string") {
+            try {
+              const message = JSON.parse(event.data) as Partial<HelloAck> & Partial<PresenceMessage>;
+              if (message.type === "hello-ack" && typeof message.color === "string") {
+                if (typeof message.onlineCount === "number") setOnlineCount(message.onlineCount);
+                const previousCursor = awareness.getLocalState()?.cursor ?? null;
+                awareness.setLocalState({
+                  user: { userId: user.id, name: user.name, email: user.email, color: message.color },
+                  cursor: previousCursor,
+                });
+                refreshCollaborators();
+              }
+              if (message.type === "presence" && typeof message.onlineCount === "number") {
+                setOnlineCount(message.onlineCount);
+              }
+            } catch {
+              // Ignore unrelated text frames.
+            }
+            return;
+          }
 
           const payload = event.data instanceof ArrayBuffer ? new Uint8Array(event.data) : new Uint8Array(event.data);
           if (!payload.length) return;
@@ -132,6 +151,7 @@ export function useCollabSession(
 
           if (messageType === DOC_UPDATE) {
             Y.applyUpdate(doc, message, "remote");
+            updateActiveContent(text.toString());
             collabReadyRef.current = true;
             setCollabStatus("ready");
             return;
@@ -144,16 +164,17 @@ export function useCollabSession(
         };
 
         socket.onerror = () => {
-          if (disposed) return;
-          setCollabStatus("error");
+          if (!disposed) setCollabStatus("error");
         };
 
         socket.onclose = () => {
           if (disposed) return;
+          collabReadyRef.current = false;
           setCollabStatus("error");
         };
       } catch {
         if (!disposed) {
+          collabReadyRef.current = false;
           setCollabStatus("error");
         }
       }
@@ -172,13 +193,17 @@ export function useCollabSession(
       if (collabAwarenessRef.current === awareness) collabAwarenessRef.current = null;
       collabReadyRef.current = false;
     };
-  }, [activeFileId, loading, projectId]);
+  }, [activeFileId, loading, projectId, updateActiveContent]);
 
   return {
     collabStatus,
     collaborators,
+    onlineCount,
+    collabText,
+    collabAwareness,
     collabDocRef,
     collabTextRef,
+    collabAwarenessRef,
     collabReadyRef,
   };
 }

@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Button } from "./ui/button";
 import type { ProjectNode, NodeType } from "../../lib/nodes";
+import type { CollaboratorPresence } from "../ide/ideTypes";
 
 interface FileExplorerProps {
   nodes: ProjectNode[];
@@ -37,6 +38,7 @@ interface FileExplorerProps {
   onRenameNode: (nodeId: string, name: string) => Promise<void>;
   onDeleteNode: (nodeId: string) => Promise<void>;
   onMoveNode?: (nodeId: string, parentId: string | null) => Promise<void>;
+  filePresence?: Record<string, CollaboratorPresence[]>;
 }
 
 type TreeNode = ProjectNode & { children: TreeNode[] };
@@ -120,6 +122,7 @@ interface ExplorerCtx {
   dragOverId: string | null;
   setDragOverId: (id: string | null) => void;
   performMove: (targetFolderId: string | null) => Promise<void>;
+  filePresence: Record<string, CollaboratorPresence[]>;
 }
 
 const Ctx = createContext<ExplorerCtx | null>(null);
@@ -139,6 +142,7 @@ export default function FileExplorer({
   onRenameNode,
   onDeleteNode,
   onMoveNode,
+  filePresence = {},
 }: FileExplorerProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [creatingParent, setCreatingParent] = useState<{ parentId: string | null } | null>(null);
@@ -248,7 +252,7 @@ export default function FileExplorer({
     creatingParent, startCreate, cancelCreate, commitCreate,
     editingId, startRename, cancelRename, commitRename,
     onFileOpen, handleDelete, siblingsOf,
-    onMoveNode, draggingId, setDraggingId, dragOverId, setDragOverId, performMove,
+    onMoveNode, draggingId, setDraggingId, dragOverId, setDragOverId, performMove, filePresence,
   };
 
   return (
@@ -376,6 +380,21 @@ function NodeRow({ node, level }: { node: TreeNode; level: number }) {
       style={{ paddingLeft: `${leftPad + 16}px`, paddingRight: "8px" }}
     >
       {getFileIcon(node.name)}
+
+      {ctx.filePresence[node.id]?.length ? (
+        <div className="flex items-center gap-0.5 ml-auto mr-1" title={ctx.filePresence[node.id].map((person) => person.name).join(", ")}>
+          {ctx.filePresence[node.id].slice(0, 4).map((person) => (
+            <span
+              key={`${person.userId}-${person.clientId}`}
+              className="w-2 h-2 rounded-full ring-1 ring-[#252526]"
+              style={{ backgroundColor: person.color }}
+            />
+          ))}
+          {ctx.filePresence[node.id].length > 4 && (
+            <span className="text-[9px] text-gray-400">+{ctx.filePresence[node.id].length - 4}</span>
+          )}
+        </div>
+      ) : null}
 
       {isEditing ? (
         <RenameInput initial={node.name} />

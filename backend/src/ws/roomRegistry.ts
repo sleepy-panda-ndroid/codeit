@@ -3,14 +3,21 @@ import { Awareness } from "y-protocols/awareness";
 import type WebSocket from "ws";
 import type { Role } from "../middleware/requireProjectRole";
 
-export const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
+export const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000;
 export const PERSIST_INTERVAL_MS = 5 * 1000;
+
+export const COLLABORATOR_COLORS = [
+  "#3b82f6", "#22c55e", "#ef4444", "#eab308", "#a855f7",
+  "#f97316", "#14b8a6", "#ec4899", "#6366f1", "#84cc16",
+  "#06b6d4", "#f43f5e",
+];
 
 export type RoomClient = {
   ws: WebSocket;
   userId: string;
   role: Role;
   clientId: number | null;
+  color: string;
   connectedAt: number;
 };
 
@@ -27,13 +34,13 @@ export type Room = {
   lastActivityAt: number;
   inactivityTimer: NodeJS.Timeout | null;
   persistTimer: NodeJS.Timeout | null;
-  /** Set true whenever ytext changes since the last persist, cleared after a successful save. */
   dirty: boolean;
   listenersAttached: boolean;
   disposed: boolean;
 };
 
 const rooms = new Map<string, Room>();
+const roomCreationPromises = new Map<string, Promise<Room>>();
 
 export function roomKey(projectId: string, nodeId: string): string {
   return `${projectId}:${nodeId}`;
@@ -54,20 +61,43 @@ export function roomStatus(key: string) {
   };
 }
 
-/**
- * Creates a new room seeded with initialContent. Caller (collabHandler) is
- * responsible for checking getRoom(key) first — creation must only happen
- * when no room already exists for this file, per the "one room per file"
- * rule.
- */
+export function getOrCreateRoom(
+  key: string,
+  projectId: string,
+  nodeId: string,
+  creatorId: string,
+  loadInitialContent: () => Promise<string>,
+  onExpire: (room: Room) => void,
+): Promise<Room> {
+  const existing = rooms.get(key);
+  if (existing) return Promise.resolve(existing);
+
+  const pending = roomCreationPromises.get(key);
+  if (pending) return pending;
+
+  const creation = loadInitialContent().then((initialContent) => {
+    const raced = rooms.get(key);
+    if (raced) return raced;
+    return createRoom(key, projectId, nodeId, creatorId, initialContent, onExpire);
+  }).finally(() => {
+    roomCreationPromises.delete(key);
+  });
+
+  roomCreationPromises.set(key, creation);
+  return creation;
+}
+
 export function createRoom(
   key: string,
   projectId: string,
   nodeId: string,
   creatorId: string,
   initialContent: string,
-  onExpire: (room: Room) => void
+  onExpire: (room: Room) => void,
 ): Room {
+  const existing = rooms.get(key);
+  if (existing) return existing;
+
   const ydoc = new Y.Doc();
   const ytext = ydoc.getText("content");
   if (initialContent) ytext.insert(0, initialContent);
@@ -95,7 +125,18 @@ export function createRoom(
   return room;
 }
 
-/** Resets the 3-minute inactivity clock. Call on every edit/awareness update/join. */
+export function chooseColor(room: Room): string {
+  const used = new Set(Array.from(room.clients.values()).map((client) => client.color));
+  const available = COLLABORATOR_COLORS.filter((color) => !used.has(color));
+  if (available.length) return available[Math.floor(Math.random() * available.length)];
+
+  let color = "";
+  do {
+    color = `hsl(${Math.floor(Math.random() * 360)} 72% 58%)`;
+  } while (used.has(color));
+  return color;
+}
+
 export function touchActivity(room: Room, onExpire: (room: Room) => void): void {
   room.lastActivityAt = Date.now();
   armInactivityTimer(room, onExpire);
@@ -106,7 +147,6 @@ function armInactivityTimer(room: Room, onExpire: (room: Room) => void): void {
   room.inactivityTimer = setTimeout(() => onExpire(room), INACTIVITY_TIMEOUT_MS);
 }
 
-/** Removes the room from the registry and clears its timers. Does NOT close sockets or persist — caller does that first. */
 export function removeRoom(key: string): void {
   const room = rooms.get(key);
   if (!room) return;
@@ -118,8 +158,6 @@ export function removeRoom(key: string): void {
 
 export function removeRoomsForProject(projectId: string): void {
   for (const [key, room] of rooms.entries()) {
-    if (room.projectId === projectId) {
-      removeRoom(key);
-    }
+    if (room.projectId === projectId) removeRoom(key);
   }
 }
