@@ -1,5 +1,6 @@
 import { useRef, useEffect } from "react";
 import { X } from "lucide-react";
+import type { CollaboratorPresence } from "../ide/ideTypes";
 
 
 export interface EditorFile {
@@ -14,9 +15,10 @@ interface EditorTabsProps {
   activeFileId: string;
   onTabClick: (fileId: string) => void;
   onTabClose: (fileId: string) => void;
+  filePresence?: Record<string, CollaboratorPresence[]>;
 }
 
-export default function EditorTabs({ files, activeFileId, onTabClick, onTabClose }: EditorTabsProps) {
+export default function EditorTabs({ files, activeFileId, onTabClick, onTabClose, filePresence = {} }: EditorTabsProps) {
   const activeTabRef = useRef<HTMLDivElement>(null);
 
   // Scroll active tab into view
@@ -46,6 +48,20 @@ export default function EditorTabs({ files, activeFileId, onTabClick, onTabClose
               </span>
             )}
             <span className="text-sm truncate max-w-[120px]">{file.name}</span>
+            {filePresence[file.id]?.length ? (
+              <span
+                className="flex items-center gap-0.5 ml-0.5"
+                title={filePresence[file.id].map((person) => person.name).join(", ")}
+              >
+                {filePresence[file.id].slice(0, 3).map((person) => (
+                  <span
+                    key={`${person.userId}-${person.clientId}`}
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ backgroundColor: person.color }}
+                  />
+                ))}
+              </span>
+            ) : null}
             <button
               className={`rounded p-0.5 transition-all hover:bg-[#3e3e42] flex-shrink-0 ${
                 file.unsaved

@@ -33,7 +33,6 @@ import {
   loadPersistedIdeState,
   mapExecutionResultToTerminal,
   mapNodeToOpenFile,
-  replaceTextContent,
   toCollaborators,
   truncateForAI,
 } from "../ide/ideUtils";
@@ -193,12 +192,20 @@ export default function IDEPage() {
     if (!showTerminal || sizes.length < 2) return;
     setPanelSizes((current) => ({ ...current, editor: sizes[0], terminal: sizes[1] }));
   }, [showTerminal]);
+  const handleRemoteCollabContent = useCallback((value: string) => {
+    if (!activeFileId) return;
+    updateActiveContent(value);
+    markSaved(activeFileId, value);
+  }, [activeFileId, markSaved, updateActiveContent]);
+
   const {
     collabStatus,
     collaborators,
-    collabTextRef,
+    onlineCount,
+    collabText,
+    collabAwareness,
     collabReadyRef,
-  } = useCollabSession(projectId, activeFileId, loading, updateActiveContent);
+  } = useCollabSession(projectId, activeFileId, loading, handleRemoteCollabContent);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -232,13 +239,7 @@ export default function IDEPage() {
   }, [activeFileId, openFiles, panelSizes, projectId, showAIPanel, showSidebar, showTerminal, stdin]);
 
   const handleCodeChange = useCallback((value: string) => {
-    const text = collabTextRef.current;
-    if (!text || !collabReadyRef.current) {
-      updateActiveContent(value);
-      return;
-    }
-
-    replaceTextContent(text, value);
+    updateActiveContent(value);
   }, [updateActiveContent]);
 
   useIdeShortcuts({
@@ -363,7 +364,7 @@ export default function IDEPage() {
         projectName={projectName}
         language={langLabel}
         collabStatus={collabStatus}
-        collaboratorCount={collaborators.length}
+        collaboratorCount={onlineCount}
         saveStatus={saveStatus}
         hasActiveFile={!!activeFile}
         readOnly={readOnly}
@@ -433,11 +434,16 @@ export default function IDEPage() {
               </div>
             ) : activeFile ? (
               <CodeEditor
+                key={activeFile.id}
                 value={activeFile.content}
                 language={activeFile.language}
                 onChange={handleCodeChange}
+                onRemoteChange={handleRemoteCollabContent}
                 settings={editorSettings}
                 readOnly={readOnly || collabStatus === "connecting" || collabStatus === "syncing"}
+                collabText={collabText}
+                collabAwareness={collabAwareness}
+                collabReady={collabReadyRef.current && collabStatus === "ready"}
               />
             ) : (
               <div className="flex items-center justify-center h-full text-gray-600">

@@ -126,15 +126,21 @@ export function replaceTextContent(text: import("yjs").Text, nextValue: string):
 }
 export function buildCollabWsUrl(projectId: string, nodeId: string, ticket: string): string { const url = new URL(`${(import.meta.env.VITE_API_BASE || "http://localhost:4000").replace(/^http/, "ws")}/ws/collab`); url.searchParams.set("ticket", ticket); url.searchParams.set("projectId", projectId); url.searchParams.set("nodeId", nodeId); return url.toString(); }
 export function toCollaborators(awareness: Awareness): CollaboratorPresence[] {
-  // One user can hold multiple Yjs clientIds (one per open tab/connection), so
-  // dedupe by userId. clientId is a random number, not sequential, so it can't
-  // be used to infer which tab connected most recently — use Yjs's own
-  // per-client lastUpdated timestamp (awareness.meta) for that instead.
   const byUserId = new Map<string, CollaboratorPresence>();
   const lastUpdatedByUserId = new Map<string, number>();
-  for (const [clientId, state] of awareness.getStates().entries()) {
-    const user = state as Partial<CollaboratorPresence> | undefined;
-    if (!user || typeof user.userId !== "string" || typeof user.name !== "string") continue;
+
+  for (const [clientId, rawState] of awareness.getStates().entries()) {
+    if (!rawState || typeof rawState !== "object") continue;
+    const state = rawState as {
+      userId?: unknown;
+      name?: unknown;
+      email?: unknown;
+      color?: unknown;
+      user?: { userId?: unknown; name?: unknown; email?: unknown; color?: unknown };
+    };
+    const user = state.user ?? state;
+    if (typeof user.userId !== "string" || typeof user.name !== "string") continue;
+
     const lastUpdated = awareness.meta.get(clientId)?.lastUpdated ?? 0;
     const previousLastUpdated = lastUpdatedByUserId.get(user.userId) ?? -1;
     if (previousLastUpdated > lastUpdated) continue;
@@ -144,9 +150,10 @@ export function toCollaborators(awareness: Awareness): CollaboratorPresence[] {
       userId: user.userId,
       name: user.name,
       email: typeof user.email === "string" ? user.email : "",
-      color: typeof user.color === "string" ? user.color : hashToColor(user.userId),
+      color: typeof user.color === "string" && user.color ? user.color : hashToColor(user.userId),
     });
   }
+
   return Array.from(byUserId.values());
 }
 

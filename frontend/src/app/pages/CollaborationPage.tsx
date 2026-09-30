@@ -197,8 +197,8 @@ export default function CollaborationPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-[#252526] border-[#3e3e42] text-white">
-                    <SelectItem value="READER">Reader</SelectItem>
-                    <SelectItem value="WRITER">Writer</SelectItem>
+                    <SelectItem value="READER">Viewer</SelectItem>
+                    <SelectItem value="WRITER">Editor</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
